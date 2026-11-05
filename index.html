@@ -68,13 +68,15 @@ var uid=function(){return Math.random().toString(36).slice(2,8)+Math.random().to
 var CONFIGURED=SUPABASE_URL.indexOf('http')===0&&SUPABASE_KEY.length>20;
 var sb=CONFIGURED?supabase.createClient(SUPABASE_URL,SUPABASE_KEY):null;
 var S={teams:[],leaders:[],scouts:[],sessions:[],notices:[]};
-var V={n:'login'},H=[],ST={},AU=null,MSG='',LE='',BUSY=false,TL={lesson:'حصة',survey:'استطلاع',trip:'رحلة'};
+var V={n:'login'},H=[],ST={},AU=null,MSG='',LE='',BUSY=false,TL={lesson:'حصة',survey:'استطلاع',trip:'رحلة'},SEC={cub:['شبل','الأشبال'],scout:['كشاف','الكشافة'],rover:['جوال','الجوالة']};
+function secOf(t){return SEC[t.section]||SEC.scout}
+function secOpts(id){return'<select id="'+id+'">'+Object.keys(SEC).map(function(k){return'<option value="'+k+'">'+SEC[k][1]+'</option>'}).join('')+'</select>'}
 function toEmail(u){u=u.trim().toLowerCase();return u.indexOf('@')>-1?u:u+'@scout.app'}
 async function q(p){var r=await p;if(r.error){alert('خطأ: '+r.error.message);throw r.error}return r.data}
 async function loadAll(){
  var r=await Promise.all([q(sb.from('teams').select('*').order('name')),q(sb.from('profiles').select('*')),q(sb.from('team_leaders').select('*')),q(sb.from('scouts').select('*').order('name')),q(sb.from('sessions').select('*')),q(sb.from('notices').select('*').order('created_at',{ascending:false}))]);
  var tl=r[2];
- S.teams=r[0].map(function(t){return{id:t.id,name:t.name,leaders:tl.filter(function(x){return x.team_id===t.id}).map(function(x){return x.leader_id})}});
+ S.teams=r[0].map(function(t){return{id:t.id,name:t.name,section:t.section||'scout',leaders:tl.filter(function(x){return x.team_id===t.id}).map(function(x){return x.leader_id})}});
  S.leaders=r[1].filter(function(p){return p.role==='leader'}).map(function(p){return{id:p.id,name:p.name,user:p.username}});
  S.scouts=r[3].map(function(s){return{id:s.id,teamId:s.team_id,name:s.name,phone:s.phone}});
  S.sessions=r[4].map(function(s){return{teamId:s.team_id,type:s.type,title:s.title,destination:s.destination,date:s.date,records:s.records}});
@@ -123,8 +125,8 @@ function R(){
  }
  else if(V.n==='admin'){
   var am=MSG;MSG='';h=bar('لوحة الإدارة',0,1)+'<main>'+(am?'<p class="ok center">'+am+'</p>':'')+'<button class="b" style="margin:0 0 6px" onclick="go({n:\'stats\'})">📊 الإحصائيات</button>'+todayBox()+excelBox()+'<h2>الفرق</h2>'+
-   (S.teams.map(function(t){return'<div class="card"><div class="t">🚩 '+esc(t.name)+'<small>عدد القادة: '+t.leaders.length+'</small></div><button class="s" onclick="go({n:\'assign\',t:\''+t.id+'\'})">القادة</button></div>'}).join('')||'<p class="center">لا توجد فرق</p>')+
-   '<div class="row"><input id="tn" placeholder="فرقة جديدة، مثال: فرقة النسور"><button class="s" onclick="addTeam()">إنشاء</button></div>'+
+   (S.teams.map(function(t){return'<div class="card"><div class="t">🚩 '+esc(t.name)+'<small>القسم: '+secOf(t)[1]+' · عدد القادة: '+t.leaders.length+'</small></div><button class="s" onclick="go({n:\'assign\',t:\''+t.id+'\'})">القادة</button></div>'}).join('')||'<p class="center">لا توجد فرق</p>')+
+   secOpts('ts')+'<div class="row"><input id="tn" placeholder="فرقة جديدة، مثال: فرقة النسور"><button class="s" onclick="addTeam()">إنشاء</button></div>'+
    '<h2>حسابات القادة</h2>'+(S.leaders.map(function(l){return'<div class="card"><div class="t">👤 '+esc(l.name)+'<small>المستخدم: '+esc(l.user)+'</small></div><button class="d" onclick="delLeader(\''+l.id+'\')">🗑</button></div>'}).join('')||'<p class="center">لا يوجد قادة</p>')+
    '<input id="ln" placeholder="اسم القائد"><input id="lu2" placeholder="اسم المستخدم (إنجليزي بدون مسافات)" autocapitalize="none" autocomplete="off"><input id="lp2" type="password" placeholder="كلمة المرور (6+ أحرف)" autocomplete="new-password"><div class="no center">'+LE+'</div><button class="b" onclick="addLeader()">＋ إنشاء حساب قائد</button></main>';
  }
@@ -132,7 +134,7 @@ function R(){
   var d=V.d||new Date().toISOString().slice(0,10),m=d.slice(0,7),ss=S.sessions;
   var fl=function(l,pre){return l.filter(function(x){return(x.date||'').indexOf(pre)===0})};
   h=bar('الإحصائيات',1)+'<main><input id="sd" type="date" value="'+d+'" onchange="V.d=this.value;R()"><p class="note" style="margin:0 0 6px">اليوم: '+d+' — الشهر: '+m+'</p>'+
-   '<h2>📈 جميع الفرق</h2>'+statRow('اليوم',agg(fl(ss,d)))+statRow('الشهر',agg(fl(ss,m)))+statRow('المجموع الكلي',agg(ss))+
+   '<h2>📈 جميع الفرق</h2>'+statRow('اليوم',agg(fl(ss,d)))+statRow('الشهر',agg(fl(ss,m)))+statRow('المجموع الكلي',agg(ss))+Object.keys(SEC).map(function(k){var ts=ss.filter(function(x){var t=team(x.teamId);return t&&(t.section||'scout')===k});return'<h2>🏷 قسم '+SEC[k][1]+'</h2>'+statRow('اليوم',agg(fl(ts,d)))+statRow('الشهر',agg(fl(ts,m)))+statRow('المجموع الكلي',agg(ts))}).join('')+
    S.teams.map(function(t){var ts=ss.filter(function(x){return x.teamId===t.id});return'<h2>🚩 '+esc(t.name)+'</h2>'+statRow('اليوم',agg(fl(ts,d)))+statRow('الشهر',agg(fl(ts,m)))+statRow('المجموع الكلي',agg(ts))}).join('')+'</main>';
  }
  else if(V.n==='assign'){
@@ -141,7 +143,7 @@ function R(){
  }
  else if(V.n==='leader'){
   var mine=S.teams.filter(function(t){return t.leaders.indexOf(V.l)>-1});
-  h=bar('فرقي',0,1)+'<main>'+S.notices.filter(function(n){return n.to===V.l&&!n.read}).map(function(n){return'<div class="card" style="background:#fff8e1;border-color:#f9a825;color:#000"><div class="t">🔔 '+esc(n.text)+'<small style="color:#555">'+esc(n.date.slice(0,16).replace('T',' '))+'</small></div><button class="s" style="color:#000;border-color:#000" onclick="readN(\''+n.id+'\')">تم ✓</button></div>'}).join('')+(mine.map(function(t){return'<div class="card" onclick="go({n:\'team\',t:\''+t.id+'\'})" style="cursor:pointer"><div class="t">👥 '+esc(t.name)+'<small>اضغط لعرض الكشافين</small></div>‹</div>'}).join('')||'<p class="center">لم يتم تعيينك في أي فرقة بعد</p>')+'</main>';
+  h=bar('فرقي',0,1)+'<main>'+S.notices.filter(function(n){return n.to===V.l&&!n.read}).map(function(n){return'<div class="card" style="background:#fff8e1;border-color:#f9a825;color:#000"><div class="t">🔔 '+esc(n.text)+'<small style="color:#555">'+esc(n.date.slice(0,16).replace('T',' '))+'</small></div><button class="s" style="color:#000;border-color:#000" onclick="readN(\''+n.id+'\')">تم ✓</button></div>'}).join('')+(mine.map(function(t){return'<div class="card" onclick="go({n:\'team\',t:\''+t.id+'\'})" style="cursor:pointer"><div class="t">👥 '+esc(t.name)+'<small>'+secOf(t)[1]+' · اضغط لعرض الكشافين</small></div>‹</div>'}).join('')||'<p class="center">لم يتم تعيينك في أي فرقة بعد</p>')+'</main>';
  }
  else if(V.n==='team'){
   var tm=team(V.t),sc=S.scouts.filter(function(s){return s.teamId===V.t});
@@ -222,17 +224,17 @@ function exportXlsx(){
  if(!a||!b||a>b){MSG='حدّد فترة صحيحة (من ≤ إلى)';return R()}
  var ss=S.sessions.filter(function(x){return x.date>=a&&x.date<=b&&(tid==='all'||x.teamId===tid)}).sort(function(x,y){return x.date<y.date?-1:1});
  if(!ss.length){MSG='لا توجد تسجيلات في هذه الفترة';return R()}
- var L={present:'حاضر',late:'متأخر',absent:'غائب'},det=[['التاريخ','الفرقة','النوع','العنوان','الكشاف','رقم ولي الأمر','الحالة']],sum={};
+ var L={present:'حاضر',late:'متأخر',absent:'غائب'},det=[['التاريخ','الفرقة','القسم','النوع','العنوان','الكشاف','رقم ولي الأمر','الحالة']],sum={};
  ss.forEach(function(x){var tn=(team(x.teamId)||{name:'—'}).name;
   for(var id in x.records){var sc=S.scouts.find(function(z){return z.id===id})||{name:'(محذوف)',phone:'',teamId:x.teamId},st=x.records[id];
-   det.push([x.date,tn,TL[x.type]||x.type,x.title||'',sc.name,sc.phone,L[st]||st]);
+   det.push([x.date,tn,secOf(team(x.teamId)||{})[1],TL[x.type]||x.type,x.title||'',sc.name,sc.phone,L[st]||st]);
    var r=sum[id]=sum[id]||{t:tn,n:sc.name,ph:sc.phone,p:0,l:0,a:0};
    if(st==='late')r.l++;else if(st==='absent')r.a++;else r.p++;}});
  var sm=[['الفرقة','الكشاف','رقم ولي الأمر','حاضر','متأخر','غائب','المجموع','نسبة الحضور %','نسبة الغياب %']];
  Object.keys(sum).map(function(k){return sum[k]}).sort(function(x,y){return x.t===y.t?(x.n<y.n?-1:1):(x.t<y.t?-1:1)}).forEach(function(r){var t=r.p+r.l+r.a;sm.push([r.t,r.n,r.ph,r.p,r.l,r.a,t,Math.round(r.p*100/t),Math.round(r.a*100/t)])});
  var wb=XLSX.utils.book_new(),w1=XLSX.utils.aoa_to_sheet(sm),w2=XLSX.utils.aoa_to_sheet(det);
  w1['!cols']=[{wch:18},{wch:22},{wch:16},{wch:8},{wch:8},{wch:8},{wch:8},{wch:14},{wch:14}];
- w2['!cols']=[{wch:12},{wch:18},{wch:10},{wch:20},{wch:22},{wch:16},{wch:10}];
+ w2['!cols']=[{wch:12},{wch:18},{wch:12},{wch:10},{wch:20},{wch:22},{wch:16},{wch:10}];
  XLSX.utils.book_append_sheet(wb,w1,'ملخص');XLSX.utils.book_append_sheet(wb,w2,'تفصيلي');
  wb.Workbook={Views:[{RTL:true}]};
  XLSX.writeFile(wb,'الحضور_'+a+'_إلى_'+b+'.xlsx');
@@ -256,7 +258,7 @@ async function delLeader(id){
  await q(sb.from('profiles').delete().eq('id',id));
  await loadAll();R();
 }
-async function addTeam(){var n=val('tn');if(!n)return;await q(sb.from('teams').insert({id:uid(),name:n}));await loadAll();R()}
+async function addTeam(){var n=val('tn');if(!n)return;await q(sb.from('teams').insert({id:uid(),name:n,section:$('ts').value}));await loadAll();R()}
 async function tgl(t,l,on){
  if(on)await q(sb.from('team_leaders').insert({team_id:t,leader_id:l}));
  else await q(sb.from('team_leaders').delete().eq('team_id',t).eq('leader_id',l));
@@ -270,8 +272,8 @@ function segHtml(id,trip){
 }
 function setSt(id,v){ST[id]=v;$('sg'+id).innerHTML=segHtml(id,V.ty==='trip');$('wb'+id).style.display=v==='present'?'none':'inline-block'}
 function msgFor(sc,st){
- var title=val('at'),tt=title?' "'+title+'"':'',date=val('adt').replace(/-/g,'/'),tm=team(V.t).name,dest=V.ty==='trip'?val('ad'):'';
- var head='السلام عليكم ورحمة الله،\nنفيدكم بأن الكشاف '+sc.name+' ',tail=' بتاريخ '+date+' (فرقة '+tm+').\nشكراً لكم على حسن تعاونكم 😊';
+ var title=val('at'),tt=title?' "'+title+'"':'',date=val('adt').replace(/-/g,'/'),tmo=team(V.t),tm=tmo.name,sec=secOf(tmo),dest=V.ty==='trip'?val('ad'):'';
+ var head='السلام عليكم ورحمة الله،\nنفيدكم بأن ال'+sec[0]+' '+sc.name+' ',tail=' بتاريخ '+date+' (فرقة '+tm+' — '+sec[1]+').\nشكراً لكم على حسن تعاونكم 😊';
  if(V.ty==='trip')return head+'تغيّب عن رحلة'+tt+(dest?' إلى '+dest:'')+tail;
  return head+(st==='late'?'تأخر عن ':'تغيّب عن ')+TL[V.ty]+tt+tail;
 }
