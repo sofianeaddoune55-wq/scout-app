@@ -32,29 +32,63 @@ h2{font-size:15px;color:var(--mut);margin:18px 0 8px}
 .wa{background:#25d366;color:#fff;text-decoration:none;padding:8px 12px;border-radius:8px;font-size:14px}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.50.0/dist/umd/supabase.min.js"></script>
 </head>
 <body>
 <div id="app"></div>
 <script>
+// ====== الصق هنا بيانات مشروعك من Supabase ======
+var SUPABASE_URL='https://xecbmixccrvkawpfznrx.supabase.co';
+var SUPABASE_KEY='sb_publishable_aezjHAQ1z5Cvnba8_0FDcw_GHnXHYR3';
+// ================================================
 var CC='213';
 var $=function(s){return document.getElementById(s)};
-var uid=function(){return Math.random().toString(36).slice(2,8)};
-function seed(){return{admin:null,leaders:[],teams:[{id:'t1',name:'فرقة الفهود',leaders:[]}],scouts:[{id:'s1',teamId:'t1',name:'سالم',phone:'0501234567'},{id:'s2',teamId:'t1',name:'خالد',phone:'0507654321'},{id:'s3',teamId:'t1',name:'يوسف',phone:'0551112223'}],sessions:[],notices:[]}}
-function load(){try{var j=localStorage.getItem('scout_demo2');if(j)return JSON.parse(j)}catch(e){}return seed()}
-function save(){try{localStorage.setItem('scout_demo2',JSON.stringify(S))}catch(e){}}
-var S=load();S.notices=S.notices||[];var V={n:'login'},H=[],ST={},AU=null,MSG='',LE='',FAIL=0,LOCK=0,TL={lesson:'حصة',survey:'استطلاع',trip:'رحلة'};
-async function hp(salt,pw){var s=salt+':'+pw;try{var b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,'0')}).join('')}catch(e){var h=5381;for(var i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;return'f'+h}}
+var uid=function(){return Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,8)};
+var CONFIGURED=SUPABASE_URL.indexOf('http')===0&&SUPABASE_KEY.length>20;
+var sb=CONFIGURED?supabase.createClient(SUPABASE_URL,SUPABASE_KEY):null;
+var S={teams:[],leaders:[],scouts:[],sessions:[],notices:[]};
+var V={n:'login'},H=[],ST={},AU=null,MSG='',LE='',BUSY=false,TL={lesson:'حصة',survey:'استطلاع',trip:'رحلة'};
+function toEmail(u){u=u.trim().toLowerCase();return u.indexOf('@')>-1?u:u+'@scout.app'}
+async function q(p){var r=await p;if(r.error){alert('خطأ: '+r.error.message);throw r.error}return r.data}
+async function loadAll(){
+ var r=await Promise.all([q(sb.from('teams').select('*').order('name')),q(sb.from('profiles').select('*')),q(sb.from('team_leaders').select('*')),q(sb.from('scouts').select('*').order('name')),q(sb.from('sessions').select('*')),q(sb.from('notices').select('*').order('created_at',{ascending:false}))]);
+ var tl=r[2];
+ S.teams=r[0].map(function(t){return{id:t.id,name:t.name,leaders:tl.filter(function(x){return x.team_id===t.id}).map(function(x){return x.leader_id})}});
+ S.leaders=r[1].filter(function(p){return p.role==='leader'}).map(function(p){return{id:p.id,name:p.name,user:p.username}});
+ S.scouts=r[3].map(function(s){return{id:s.id,teamId:s.team_id,name:s.name,phone:s.phone}});
+ S.sessions=r[4].map(function(s){return{teamId:s.team_id,type:s.type,title:s.title,destination:s.destination,date:s.date,records:s.records}});
+ S.notices=r[5].map(function(n){return{id:n.id,to:n.to_leader,teamId:n.team_id,text:n.text,date:n.created_at,read:n.read}});
+}
+async function init(){
+ if(!CONFIGURED){R();return}
+ var s=await sb.auth.getSession();
+ if(!s.data.session){R();return}
+ await enter(s.data.session.user);
+}
+async function enter(user){
+ var p=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
+ if(!p.data){await sb.auth.signOut();LE='هذا الحساب غير مفعّل في التطبيق';V={n:'login'};return R()}
+ AU={role:p.data.role,id:user.id,name:p.data.name};
+ try{await loadAll()}catch(e){}
+ H=[];V=AU.role==='admin'?{n:'admin'}:{n:'leader',l:AU.id};LE='';R();
+}
+async function doLogin(){
+ var u=val('lu'),p=$('lp').value;if(!u||!p){LE='أدخل اسم المستخدم وكلمة المرور';return R()}
+ var r=await sb.auth.signInWithPassword({email:toEmail(u),password:p});
+ if(r.error){LE='اسم المستخدم أو كلمة المرور غير صحيحة';return R()}
+ await enter(r.data.user);
+}
+async function logout(){await sb.auth.signOut();AU=null;H=[];V={n:'login'};LE='';R()}
 function go(v){H.push(V);V=v;if(v.n==='att')ST={};R()}
 function back(){V=H.pop()||{n:'login'};R()}
-function logout(){AU=null;H=[];V={n:'login'};LE='';R()}
 function bar(t,b,out){return'<header>'+(b?'<button class="ic" onclick="back()">→</button>':'')+'<h1>'+t+'</h1>'+(out?'<button class="ic" onclick="logout()">خروج</button>':'')+'</header>'}
 function team(id){return S.teams.find(function(t){return t.id===id})}
-function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function val(id){return $(id).value.trim()}
 function guard(){
- var adm=['admin','assign','stats'].indexOf(V.n)>-1,lea=['leader','team','type','att','notify'].indexOf(V.n)>-1;
- if(adm&&!(AU&&AU.role==='admin'))return false;
- if(lea&&!AU)return false;
+ if(V.n==='login')return true;
+ if(!AU)return false;
+ if(['admin','assign','stats'].indexOf(V.n)>-1&&AU.role!=='admin')return false;
  if(['team','type','att'].indexOf(V.n)>-1&&AU.role==='leader'){var t=team(V.t);if(!t||t.leaders.indexOf(AU.id)<0)return false}
  if(V.n==='leader'&&AU.role==='leader'&&V.l!==AU.id)return false;
  return true;
@@ -62,27 +96,23 @@ function guard(){
 function R(){
  if(!guard()){AU=null;H=[];V={n:'login'}}
  var h='';
- if(V.n==='login'&&!S.admin){
-  h=bar('إعداد أول مرة')+'<main><div class="big">🔐</div><p class="center">أنشئ حساب المدير (مرة واحدة فقط)</p><input id="su" placeholder="اسم مستخدم المدير" autocomplete="username"><input id="sp1" type="password" placeholder="كلمة المرور (6 أحرف فأكثر)" autocomplete="new-password"><input id="sp2" type="password" placeholder="تأكيد كلمة المرور" autocomplete="new-password"><div class="no center">'+LE+'</div><button class="b" onclick="setup()">إنشاء حساب المدير</button></main>';
- }
+ if(!CONFIGURED){h=bar('إعداد ناقص')+'<main><div class="big">⚠️</div><p class="center">لم يتم لصق رابط Supabase والمفتاح داخل الملف بعد.</p></main>'}
  else if(V.n==='login'){
-  h=bar('التطبيق الكشفي')+'<main><div class="big">⚜️</div><p class="center">تسجيل الدخول</p><input id="lu" placeholder="اسم المستخدم" autocomplete="username" autocapitalize="none"><input id="lp" type="password" placeholder="كلمة المرور" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')doLogin()"><div class="no center">'+LE+'</div><button class="b" onclick="doLogin()">دخول</button><p class="note">حسابات القادة تنشئها الإدارة فقط</p></main>';
+  h=bar('التطبيق الكشفي')+'<main><div class="big">⚜️</div><p class="center">تسجيل الدخول</p><input id="lu" placeholder="اسم المستخدم أو البريد" autocomplete="username" autocapitalize="none"><input id="lp" type="password" placeholder="كلمة المرور" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')doLogin()"><div class="no center">'+LE+'</div><button class="b" onclick="doLogin()">دخول</button><p class="note">حسابات القادة تنشئها الإدارة فقط</p></main>';
  }
  else if(V.n==='admin'){
   var am=MSG;MSG='';h=bar('لوحة الإدارة',0,1)+'<main>'+(am?'<p class="ok center">'+am+'</p>':'')+'<button class="b" style="margin:0 0 6px" onclick="go({n:\'stats\'})">📊 الإحصائيات</button>'+todayBox()+excelBox()+'<h2>الفرق</h2>'+
    (S.teams.map(function(t){return'<div class="card"><div class="t">🚩 '+esc(t.name)+'<small>عدد القادة: '+t.leaders.length+'</small></div><button class="s" onclick="go({n:\'assign\',t:\''+t.id+'\'})">القادة</button></div>'}).join('')||'<p class="center">لا توجد فرق</p>')+
    '<div class="row"><input id="tn" placeholder="فرقة جديدة، مثال: فرقة النسور"><button class="s" onclick="addTeam()">إنشاء</button></div>'+
-   '<h2>حسابات القادة</h2>'+(S.leaders.map(function(l){return'<div class="card"><div class="t">👤 '+esc(l.name)+'<small>المستخدم: '+esc(l.user)+'</small></div><button class="s" onclick="resetPw(\''+l.id+'\')">كلمة سر جديدة</button><button class="d" onclick="delLeader(\''+l.id+'\')">🗑</button></div>'}).join('')||'<p class="center">لا يوجد قادة</p>')+
-   '<input id="ln" placeholder="اسم القائد"><input id="lu2" placeholder="اسم المستخدم" autocapitalize="none" autocomplete="off"><input id="lp2" type="password" placeholder="كلمة المرور (6+ أحرف)" autocomplete="new-password"><div class="no center">'+LE+'</div><button class="b" onclick="addLeader()">＋ إنشاء حساب قائد</button>'+
-   '<p class="note"><button class="s" onclick="if(confirm(\'مسح كل البيانات والحسابات؟\')){S=seed();save();logout()}">إعادة ضبط كل شيء</button></p></main>';
+   '<h2>حسابات القادة</h2>'+(S.leaders.map(function(l){return'<div class="card"><div class="t">👤 '+esc(l.name)+'<small>المستخدم: '+esc(l.user)+'</small></div><button class="d" onclick="delLeader(\''+l.id+'\')">🗑</button></div>'}).join('')||'<p class="center">لا يوجد قادة</p>')+
+   '<input id="ln" placeholder="اسم القائد"><input id="lu2" placeholder="اسم المستخدم (إنجليزي بدون مسافات)" autocapitalize="none" autocomplete="off"><input id="lp2" type="password" placeholder="كلمة المرور (6+ أحرف)" autocomplete="new-password"><div class="no center">'+LE+'</div><button class="b" onclick="addLeader()">＋ إنشاء حساب قائد</button></main>';
  }
  else if(V.n==='stats'){
   var d=V.d||new Date().toISOString().slice(0,10),m=d.slice(0,7),ss=S.sessions;
   var fl=function(l,pre){return l.filter(function(x){return(x.date||'').indexOf(pre)===0})};
   h=bar('الإحصائيات',1)+'<main><input id="sd" type="date" value="'+d+'" onchange="V.d=this.value;R()"><p class="note" style="margin:0 0 6px">اليوم: '+d+' — الشهر: '+m+'</p>'+
    '<h2>📈 جميع الفرق</h2>'+statRow('اليوم',agg(fl(ss,d)))+statRow('الشهر',agg(fl(ss,m)))+statRow('المجموع الكلي',agg(ss))+
-   S.teams.map(function(t){var ts=ss.filter(function(x){return x.teamId===t.id});return'<h2>🚩 '+esc(t.name)+'</h2>'+statRow('اليوم',agg(fl(ts,d)))+statRow('الشهر',agg(fl(ts,m)))+statRow('المجموع الكلي',agg(ts))}).join('')+
-   (ss.length?'':'<button class="b" onclick="genSample()">إنشاء بيانات تجريبية</button>')+'</main>';
+   S.teams.map(function(t){var ts=ss.filter(function(x){return x.teamId===t.id});return'<h2>🚩 '+esc(t.name)+'</h2>'+statRow('اليوم',agg(fl(ts,d)))+statRow('الشهر',agg(fl(ts,m)))+statRow('المجموع الكلي',agg(ts))}).join('')+'</main>';
  }
  else if(V.n==='assign'){
   var t=team(V.t);
@@ -90,7 +120,7 @@ function R(){
  }
  else if(V.n==='leader'){
   var mine=S.teams.filter(function(t){return t.leaders.indexOf(V.l)>-1});
-  h=bar('فرقي',0,1)+'<main>'+S.notices.filter(function(n){return n.to===V.l&&!n.read}).map(function(n){return'<div class="card" style="background:#fff8e1;border-color:#f9a825;color:#000"><div class="t">🔔 '+esc(n.text)+'<small style="color:#555">'+n.date.slice(0,16).replace('T',' ')+'</small></div><button class="s" style="color:#000;border-color:#000" onclick="readN(\''+n.id+'\')">تم ✓</button></div>'}).join('')+(mine.map(function(t){return'<div class="card" onclick="go({n:\'team\',t:\''+t.id+'\'})" style="cursor:pointer"><div class="t">👥 '+esc(t.name)+'<small>اضغط لعرض الكشافين</small></div>‹</div>'}).join('')||'<p class="center">لم يتم تعيينك في أي فرقة بعد</p>')+'</main>';
+  h=bar('فرقي',0,1)+'<main>'+S.notices.filter(function(n){return n.to===V.l&&!n.read}).map(function(n){return'<div class="card" style="background:#fff8e1;border-color:#f9a825;color:#000"><div class="t">🔔 '+esc(n.text)+'<small style="color:#555">'+esc(n.date.slice(0,16).replace('T',' '))+'</small></div><button class="s" style="color:#000;border-color:#000" onclick="readN(\''+n.id+'\')">تم ✓</button></div>'}).join('')+(mine.map(function(t){return'<div class="card" onclick="go({n:\'team\',t:\''+t.id+'\'})" style="cursor:pointer"><div class="t">👥 '+esc(t.name)+'<small>اضغط لعرض الكشافين</small></div>‹</div>'}).join('')||'<p class="center">لم يتم تعيينك في أي فرقة بعد</p>')+'</main>';
  }
  else if(V.n==='team'){
   var tm=team(V.t),sc=S.scouts.filter(function(s){return s.teamId===V.t});
@@ -107,9 +137,6 @@ function R(){
    (sc2.map(function(s){return'<div class="card att"><div class="t"><b>'+esc(s.name)+'</b></div><button class="wa" id="wb'+s.id+'" style="display:none;border:0;cursor:pointer" onclick="sendWa(\''+s.id+'\')">📨 إشعار</button><div class="seg" id="sg'+s.id+'">'+segHtml(s.id,trip)+'</div></div>'}).join('')||'<p class="center">أضف كشافين أولاً</p>')+
    '<button class="b" onclick="saveAtt()">💾 حفظ الحضور</button></main>';
  }
- else if(V.n==='notify'){
-  h=bar('تم الحفظ ✅',0)+'<main>'+(V.list.length?'<h2>إشعار أولياء أمور الغائبين عبر واتساب</h2>'+V.list.map(function(x){return'<div class="card"><div class="t">'+esc(x.name)+'</div><a class="wa" target="_blank" rel="noopener" href="'+x.url+'">إرسال واتساب</a></div>'}).join(''):'<p class="center">لا يوجد غائبون 🎉</p>')+'<button class="b" onclick="back()">إغلاق</button></main>';
- }
  $('app').innerHTML=h;
 }
 function agg(list){var r={p:0,l:0,a:0};list.forEach(function(x){for(var k in x.records){var v=x.records[k];if(v==='late')r.l++;else if(v==='absent')r.a++;else r.p++}});r.t=r.p+r.l+r.a;return r}
@@ -118,13 +145,6 @@ function statRow(lbl,r){
  var pc=function(n){return Math.round(n*100/r.t)};
  return'<div class="st"><b>'+lbl+'</b><span style="float:left;color:var(--mut);font-size:13px">'+r.t+' تسجيل</span><div class="bar"><i style="width:'+r.p*100/r.t+'%;background:var(--pri)"></i><i style="width:'+r.l*100/r.t+'%;background:#f9a825"></i><i style="width:'+r.a*100/r.t+'%;background:var(--red)"></i></div><small>حاضر '+pc(r.p)+'% ('+r.p+') · متأخر '+pc(r.l)+'% ('+r.l+') · غائب '+pc(r.a)+'% ('+r.a+')</small></div>';
 }
-function genSample(){
- if(!AU||AU.role!=='admin')return;
- S.teams.forEach(function(t){var sc=S.scouts.filter(function(x){return x.teamId===t.id});if(!sc.length)return;
-  for(var i=0;i<12;i++){var rec={};sc.forEach(function(x){var r=Math.random();rec[x.id]=r<.7?'present':r<.85?'late':'absent'});
-   S.sessions.push({teamId:t.id,type:'lesson',title:'',destination:'',date:new Date(Date.now()-i*86400000).toISOString().slice(0,10),records:rec})}});
- save();R();
-}
 function todayBox(){
  var d=new Date().toISOString().slice(0,10);
  return'<h2>📅 تسجيل الحضور اليوم ('+d+')</h2>'+(S.teams.map(function(t){
@@ -132,13 +152,13 @@ function todayBox(){
   var sent=S.notices.some(function(n){return n.teamId===t.id&&n.date.slice(0,10)===d});
   return'<div class="card"><div class="t">'+esc(t.name)+'<small class="'+(done?'ok':'no')+'">'+(done?'✅ تم تسجيل الحضور ('+ss.length+' تسجيل)':'❌ لم يُسجَّل الحضور بعد')+'</small>'+(sent&&!done?'<small>🔔 أُرسل تذكير اليوم</small>':'')+'</div>'+(done?'':'<button class="s" onclick="remind(\''+t.id+'\')">🔔 تذكير القائد</button>')+'</div>'}).join('')||'<p class="center">لا توجد فرق</p>');
 }
-function remind(tid){
+async function remind(tid){
  if(!AU||AU.role!=='admin')return;var t=team(tid);
  if(!t.leaders.length){MSG='لا يوجد قائد معيّن لهذه الفرقة، عيّن قائداً أولاً';return R()}
- t.leaders.forEach(function(l){S.notices.push({id:uid(),to:l,teamId:tid,text:'تذكير من الإدارة: لم يتم تسجيل حضور '+t.name+' اليوم. الرجاء تسجيل الحضور.',date:new Date().toISOString(),read:false})});
- save();MSG='تم إرسال التذكير إلى قائد '+t.name+' ✅';R();
+ await q(sb.from('notices').insert(t.leaders.map(function(l){return{to_leader:l,team_id:tid,text:'تذكير من الإدارة: لم يتم تسجيل حضور '+t.name+' اليوم. الرجاء تسجيل الحضور.'}})));
+ await loadAll();MSG='تم إرسال التذكير إلى قائد '+t.name+' ✅';R();
 }
-function readN(id){var n=S.notices.find(function(x){return x.id===id&&AU&&x.to===AU.id});if(n){n.read=true;save();R()}}
+async function readN(id){await q(sb.from('notices').update({read:true}).eq('id',id));await loadAll();R()}
 function excelBox(){
  var o=S.teams.map(function(t){return'<option value="'+t.id+'">'+esc(t.name)+'</option>'}).join(''),d=new Date().toISOString().slice(0,10),m=d.slice(0,8)+'01';
  return'<h2>📥 إضافة كشافين من Excel</h2><div class="st"><select id="xt">'+o+'</select><input id="xf" type="file" accept=".xlsx,.xls,.csv"><small>العمود الأول: الاسم — العمود الثاني: رقم ولي الأمر</small><button class="b" onclick="importXlsx()">استيراد الأسماء</button><button class="s" style="margin-top:8px" onclick="tplXlsx()">تحميل نموذج الملف</button></div>'+
@@ -155,19 +175,21 @@ function importXlsx(){
  var f=$('xf').files[0],tid=$('xt').value;
  if(!f||!tid){MSG='اختر الفرقة وملف Excel أولاً';return R()}
  var rd=new FileReader();
- rd.onload=function(e){
+ rd.onload=async function(e){
   try{
    var wb=XLSX.read(e.target.result,{type:'array'}),ws=wb.Sheets[wb.SheetNames[0]];
-   var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''}),n=0,dup=0,bad=0;
+   var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''}),add=[],dup=0,bad=0;
    rows.forEach(function(r,i){
     var name=String(r[0]||'').trim(),ph=String(r[1]||'').trim();
     if(i===0&&/اسم|name/i.test(name))return;
     if(!name&&!ph)return;
     if(!name||!ph){bad++;return}
-    if(S.scouts.some(function(x){return x.teamId===tid&&x.name===name&&x.phone===ph})){dup++;return}
-    S.scouts.push({id:uid(),teamId:tid,name:name,phone:ph});n++;
+    if(S.scouts.concat(add).some(function(x){return x.teamId===tid&&x.name===name&&x.phone===ph})){dup++;return}
+    add.push({id:uid(),teamId:tid,name:name,phone:ph});
    });
-   save();MSG='تمت إضافة '+n+' كشاف'+(dup?' — تخطّي '+dup+' مكرر':'')+(bad?' — '+bad+' صف ناقص':'');
+   if(add.length)await q(sb.from('scouts').insert(add.map(function(x){return{id:x.id,team_id:x.teamId,name:x.name,phone:x.phone}})));
+   await loadAll();
+   MSG='تمت إضافة '+add.length+' كشاف'+(dup?' — تخطّي '+dup+' مكرر':'')+(bad?' — '+bad+' صف ناقص':'');
   }catch(err){MSG='تعذّر قراءة الملف'}
   R();
  };
@@ -195,39 +217,32 @@ function exportXlsx(){
  XLSX.writeFile(wb,'الحضور_'+a+'_إلى_'+b+'.xlsx');
  MSG='تم تجهيز الملف ✅';R();
 }
-async function setup(){
- var u=val('su').toLowerCase(),a=$('sp1').value,b=$('sp2').value;
- if(u.length<3){LE='اسم المستخدم 3 أحرف على الأقل';return R()}
- if(a.length<6){LE='كلمة المرور 6 أحرف على الأقل';return R()}
- if(a!==b){LE='كلمتا المرور غير متطابقتين';return R()}
- var salt=uid()+uid();S.admin={user:u,salt:salt,hash:await hp(salt,a)};save();LE='';R();
-}
-async function doLogin(){
- if(Date.now()<LOCK){LE='محاولات كثيرة، انتظر '+Math.ceil((LOCK-Date.now())/1000)+' ثانية';return R()}
- var u=val('lu').toLowerCase(),p=$('lp').value;
- if(u===S.admin.user&&await hp(S.admin.salt,p)===S.admin.hash){AU={role:'admin'};FAIL=0;LE='';H=[];V={n:'admin'};return R()}
- var l=S.leaders.find(function(x){return x.user===u});
- if(l&&await hp(l.salt,p)===l.hash){AU={role:'leader',id:l.id};FAIL=0;LE='';H=[];V={n:'leader',l:l.id};return R()}
- FAIL++;if(FAIL>=5){LOCK=Date.now()+30000;FAIL=0}
- LE='اسم المستخدم أو كلمة المرور غير صحيحة';R();
-}
 async function addLeader(){
  if(!AU||AU.role!=='admin')return;
  var n=val('ln'),u=val('lu2').toLowerCase(),p=$('lp2').value;
- if(!n||u.length<3){LE='أدخل الاسم واسم مستخدم (3 أحرف+)';return R()}
+ if(!n||!/^[a-z0-9._-]{3,}$/.test(u)){LE='أدخل الاسم، واسم مستخدم إنجليزي (3 أحرف+) بدون مسافات';return R()}
  if(p.length<6){LE='كلمة المرور 6 أحرف على الأقل';return R()}
- if(u===S.admin.user||S.leaders.some(function(x){return x.user===u})){LE='اسم المستخدم مستخدم مسبقاً';return R()}
- var salt=uid()+uid();S.leaders.push({id:uid(),name:n,user:u,salt:salt,hash:await hp(salt,p)});save();LE='';R();
+ var tmp=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,storageKey:'tmp-'+uid()}});
+ var r=await tmp.auth.signUp({email:toEmail(u),password:p});
+ if(r.error||!r.data.user){LE='تعذّر إنشاء الحساب: '+(r.error?r.error.message:'اسم المستخدم مستخدم');return R()}
+ var ins=await sb.from('profiles').insert({id:r.data.user.id,name:n,username:u,role:'leader'});
+ if(ins.error){LE='تعذّر حفظ الحساب: '+ins.error.message;return R()}
+ await loadAll();LE='';MSG='تم إنشاء حساب القائد ✅';R();
 }
-async function resetPw(id){
- var p=prompt('كلمة المرور الجديدة (6+ أحرف)');if(!p||p.length<6)return;
- var l=S.leaders.find(function(x){return x.id===id});l.salt=uid()+uid();l.hash=await hp(l.salt,p);save();alert('تم تغيير كلمة المرور');
+async function delLeader(id){
+ if(!confirm('إلغاء تفعيل حساب القائد؟'))return;
+ await q(sb.from('team_leaders').delete().eq('leader_id',id));
+ await q(sb.from('profiles').delete().eq('id',id));
+ await loadAll();R();
 }
-function delLeader(id){if(!confirm('حذف حساب القائد؟'))return;S.leaders=S.leaders.filter(function(l){return l.id!==id});S.teams.forEach(function(t){t.leaders=t.leaders.filter(function(x){return x!==id})});save();R()}
-function addTeam(){var n=val('tn');if(!n)return;S.teams.push({id:uid(),name:n,leaders:[]});save();R()}
-function tgl(t,l,on){var tm=team(t),i=tm.leaders.indexOf(l);if(on&&i<0)tm.leaders.push(l);if(!on&&i>-1)tm.leaders.splice(i,1);save()}
-function addScout(){var n=val('sn'),p=val('sp');if(!n||!p)return;S.scouts.push({id:uid(),teamId:V.t,name:n,phone:p});save();R()}
-function delScout(id){S.scouts=S.scouts.filter(function(s){return s.id!==id});save();R()}
+async function addTeam(){var n=val('tn');if(!n)return;await q(sb.from('teams').insert({id:uid(),name:n}));await loadAll();R()}
+async function tgl(t,l,on){
+ if(on)await q(sb.from('team_leaders').insert({team_id:t,leader_id:l}));
+ else await q(sb.from('team_leaders').delete().eq('team_id',t).eq('leader_id',l));
+ await loadAll();
+}
+async function addScout(){var n=val('sn'),p=val('sp');if(!n||!p)return;await q(sb.from('scouts').insert({id:uid(),team_id:V.t,name:n,phone:p}));await loadAll();R()}
+async function delScout(id){if(!confirm('حذف الكشاف؟'))return;await q(sb.from('scouts').delete().eq('id',id));await loadAll();R()}
 function segHtml(id,trip){
  var o=trip?[['present','حاضر',''],['absent','غائب','a']]:[['present','حاضر',''],['late','متأخر','l'],['absent','غائب','a']],cur=ST[id]||'present';
  return o.map(function(x){return'<button class="'+(cur===x[0]?'on ':'')+x[2]+'" onclick="setSt(\''+id+'\',\''+x[0]+'\')">'+x[1]+'</button>'}).join('');
@@ -244,13 +259,16 @@ function sendWa(id){
  window.open('https://wa.me/'+norm(sc.phone)+'?text='+encodeURIComponent(msgFor(sc,st)),'_blank');
 }
 function norm(p){p=p.replace(/[^0-9+]/g,'');if(p[0]==='+')return p.slice(1);if(p.slice(0,2)==='00')return p.slice(2);if(p[0]==='0')return CC+p.slice(1);if(p.length===9)return CC+p;return p}
-function saveAtt(){
+async function saveAtt(){
+ if(BUSY)return;
  var sc=S.scouts.filter(function(s){return s.teamId===V.t});if(!sc.length)return;
  var rec={};sc.forEach(function(s){rec[s.id]=ST[s.id]||'present'});
- S.sessions.push({teamId:V.t,type:V.ty,title:val('at'),destination:V.ty==='trip'?val('ad'):'',date:val('adt'),records:rec});save();
- H.pop();V=H.pop()||{n:'login'};MSG='تم حفظ الحضور ✅';R();
+ var d=val('adt');if(!d){alert('اختر التاريخ');return}
+ BUSY=true;
+ try{await q(sb.from('sessions').insert({team_id:V.t,type:V.ty,title:val('at'),destination:V.ty==='trip'?val('ad'):'',date:d,records:rec}));await loadAll()}catch(e){BUSY=false;return}
+ BUSY=false;H.pop();V=H.pop()||{n:'login'};MSG='تم حفظ الحضور ✅';R();
 }
-R();
+init();
 </script>
 </body>
 </html>
