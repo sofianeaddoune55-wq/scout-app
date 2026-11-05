@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>التطبيق الكشفي — نسخة تجريبية</title>
+<style>
+:root{--bg:#f4f7f3;--card:#fff;--tx:#1b1f1a;--mut:#6b756a;--pri:#2e7d32;--on:#fff;--bd:#dde3da;--red:#c62828;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121512;--card:#1c211b;--tx:#e8ece6;--mut:#9aa59a;--pri:#66bb6a;--on:#0d1a0e;--bd:#2d352c;--red:#ef5350;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#121512;--card:#1c211b;--tx:#e8ece6;--mut:#9aa59a;--pri:#66bb6a;--on:#0d1a0e;--bd:#2d352c;--red:#ef5350;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;max-width:560px;margin-inline:auto;min-height:100vh}
+header{display:flex;align-items:center;gap:8px;padding:14px 16px;background:var(--pri);color:var(--on)}
+header h1{font-size:18px;margin:0;flex:1}
+.ic{background:transparent;border:0;color:inherit;font-size:15px;cursor:pointer;padding:6px}
+main{padding:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px}
+.card .t{flex:1}.card small{color:var(--mut);display:block}
+button.b{background:var(--pri);color:var(--on);border:0;border-radius:10px;padding:12px 16px;font-size:16px;cursor:pointer;width:100%;margin-top:8px}
+button.s{background:transparent;color:var(--pri);border:1px solid var(--pri);border-radius:8px;padding:6px 10px;cursor:pointer}
+button.d{background:transparent;color:var(--red);border:0;cursor:pointer;font-size:18px}
+input,select{width:100%;padding:11px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx);font-size:16px;margin-bottom:8px}
+.row{display:flex;gap:8px}.row input{margin:0}
+h2{font-size:15px;color:var(--mut);margin:18px 0 8px}
+.big{font-size:56px;text-align:center;margin:20px 0 4px}
+.center{text-align:center}
+.ok{color:var(--pri)}.no{color:var(--red)}
+.note{font-size:13px;color:var(--mut);text-align:center;margin-top:20px}
+.card.att{flex-wrap:wrap}.seg{display:flex;gap:4px;width:100%}.seg button{flex:1;padding:8px 4px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:8px;font-size:14px;cursor:pointer}.seg button.on{background:var(--pri);color:var(--on);border-color:var(--pri)}.seg button.on.l{background:#f9a825;color:#000;border-color:#f9a825}.seg button.on.a{background:var(--red);color:#fff;border-color:var(--red)}
+.st{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px 12px;margin-bottom:8px}.bar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--bd);margin:8px 0}.bar i{display:block;height:100%}.st small{color:var(--mut);display:block}
+.wa{background:#25d366;color:#fff;text-decoration:none;padding:8px 12px;border-radius:8px;font-size:14px}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<script>
+var CC='213';
+var $=function(s){return document.getElementById(s)};
+var uid=function(){return Math.random().toString(36).slice(2,8)};
+function seed(){return{admin:null,leaders:[],teams:[{id:'t1',name:'فرقة الفهود',leaders:[]}],scouts:[{id:'s1',teamId:'t1',name:'سالم',phone:'0501234567'},{id:'s2',teamId:'t1',name:'خالد',phone:'0507654321'},{id:'s3',teamId:'t1',name:'يوسف',phone:'0551112223'}],sessions:[],notices:[]}}
+function load(){try{var j=localStorage.getItem('scout_demo2');if(j)return JSON.parse(j)}catch(e){}return seed()}
+function save(){try{localStorage.setItem('scout_demo2',JSON.stringify(S))}catch(e){}}
+var S=load();S.notices=S.notices||[];var V={n:'login'},H=[],ST={},AU=null,MSG='',LE='',FAIL=0,LOCK=0,TL={lesson:'حصة',survey:'استطلاع',trip:'رحلة'};
+async function hp(salt,pw){var s=salt+':'+pw;try{var b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,'0')}).join('')}catch(e){var h=5381;for(var i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;return'f'+h}}
+function go(v){H.push(V);V=v;if(v.n==='att')ST={};R()}
+function back(){V=H.pop()||{n:'login'};R()}
+function logout(){AU=null;H=[];V={n:'login'};LE='';R()}
+function bar(t,b,out){return'<header>'+(b?'<button class="ic" onclick="back()">→</button>':'')+'<h1>'+t+'</h1>'+(out?'<button class="ic" onclick="logout()">خروج</button>':'')+'</header>'}
+function team(id){return S.teams.find(function(t){return t.id===id})}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function val(id){return $(id).value.trim()}
+function guard(){
+ var adm=['admin','assign','stats'].indexOf(V.n)>-1,lea=['leader','team','type','att','notify'].indexOf(V.n)>-1;
+ if(adm&&!(AU&&AU.role==='admin'))return false;
+ if(lea&&!AU)return false;
+ if(['team','type','att'].indexOf(V.n)>-1&&AU.role==='leader'){var t=team(V.t);if(!t||t.leaders.indexOf(AU.id)<0)return false}
+ if(V.n==='leader'&&AU.role==='leader'&&V.l!==AU.id)return false;
+ return true;
+}
+function R(){
+ if(!guard()){AU=null;H=[];V={n:'login'}}
+ var h='';
+ if(V.n==='login'&&!S.admin){
+  h=bar('إعداد أول مرة')+'<main><div class="big">🔐</div><p class="center">أنشئ حساب المدير (مرة واحدة فقط)</p><input id="su" placeholder="اسم مستخدم المدير" autocomplete="username"><input id="sp1" type="password" placeholder="كلمة المرور (6 أحرف فأكثر)" autocomplete="new-password"><input id="sp2" type="password" placeholder="تأكيد كلمة المرور" autocomplete="new-password"><div class="no center">'+LE+'</div><button class="b" onclick="setup()">إنشاء حساب المدير</button></main>';
+ }
+ else if(V.n==='login'){
+  h=bar('التطبيق الكشفي')+'<main><div class="big">⚜️</div><p class="center">تسجيل الدخول</p><input id="lu" placeholder="اسم المستخدم" autocomplete="username" autocapitalize="none"><input id="lp" type="password" placeholder="كلمة المرور" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')doLogin()"><div class="no center">'+LE+'</div><button class="b" onclick="doLogin()">دخول</button><p class="note">حسابات القادة تنشئها الإدارة فقط</p></main>';
+ }
+ else if(V.n==='admin'){
+  var am=MSG;MSG='';h=bar('لوحة الإدارة',0,1)+'<main>'+(am?'<p class="ok center">'+am+'</p>':'')+'<button class="b" style="margin:0 0 6px" onclick="go({n:\'stats\'})">📊 الإحصائيات</button>'+todayBox()+excelBox()+'<h2>الفرق</h2>'+
+   (S.teams.map(function(t){return'<div class="card"><div class="t">🚩 '+esc(t.name)+'<small>عدد القادة: '+t.leaders.length+'</small></div><button class="s" onclick="go({n:\'assign\',t:\''+t.id+'\'})">القادة</button></div>'}).join('')||'<p class="center">لا توجد فرق</p>')+
+   '<div class="row"><input id="tn" placeholder="فرقة جديدة، مثال: فرقة النسور"><button class="s" onclick="addTeam()">إنشاء</button></div>'+
+   '<h2>حسابات القادة</h2>'+(S.leaders.map(function(l){return'<div class="card"><div class="t">👤 '+esc(l.name)+'<small>المستخدم: '+esc(l.user)+'</small></div><button class="s" onclick="resetPw(\''+l.id+'\')">كلمة سر جديدة</button><button class="d" onclick="delLeader(\''+l.id+'\')">🗑</button></div>'}).join('')||'<p class="center">لا يوجد قادة</p>')+
+   '<input id="ln" placeholder="اسم القائد"><input id="lu2" placeholder="اسم المستخدم" autocapitalize="none" autocomplete="off"><input id="lp2" type="password" placeholder="كلمة المرور (6+ أحرف)" autocomplete="new-password"><div class="no center">'+LE+'</div><button class="b" onclick="addLeader()">＋ إنشاء حساب قائد</button>'+
+   '<p class="note"><button class="s" onclick="if(confirm(\'مسح كل البيانات والحسابات؟\')){S=seed();save();logout()}">إعادة ضبط كل شيء</button></p></main>';
+ }
+ else if(V.n==='stats'){
+  var d=V.d||new Date().toISOString().slice(0,10),m=d.slice(0,7),ss=S.sessions;
+  var fl=function(l,pre){return l.filter(function(x){return(x.date||'').indexOf(pre)===0})};
+  h=bar('الإحصائيات',1)+'<main><input id="sd" type="date" value="'+d+'" onchange="V.d=this.value;R()"><p class="note" style="margin:0 0 6px">اليوم: '+d+' — الشهر: '+m+'</p>'+
+   '<h2>📈 جميع الفرق</h2>'+statRow('اليوم',agg(fl(ss,d)))+statRow('الشهر',agg(fl(ss,m)))+statRow('المجموع الكلي',agg(ss))+
+   S.teams.map(function(t){var ts=ss.filter(function(x){return x.teamId===t.id});return'<h2>🚩 '+esc(t.name)+'</h2>'+statRow('اليوم',agg(fl(ts,d)))+statRow('الشهر',agg(fl(ts,m)))+statRow('المجموع الكلي',agg(ts))}).join('')+
+   (ss.length?'':'<button class="b" onclick="genSample()">إنشاء بيانات تجريبية</button>')+'</main>';
+ }
+ else if(V.n==='assign'){
+  var t=team(V.t);
+  h=bar('تعيين القادة — '+esc(t.name),1)+'<main>'+(S.leaders.map(function(l){return'<label class="card"><input type="checkbox" style="width:auto;margin:0" '+(t.leaders.indexOf(l.id)>-1?'checked':'')+' onchange="tgl(\''+t.id+'\',\''+l.id+'\',this.checked)"><span class="t">'+esc(l.name)+'</span></label>'}).join('')||'<p class="center">أنشئ حسابات القادة أولاً</p>')+'</main>';
+ }
+ else if(V.n==='leader'){
+  var mine=S.teams.filter(function(t){return t.leaders.indexOf(V.l)>-1});
+  h=bar('فرقي',0,1)+'<main>'+S.notices.filter(function(n){return n.to===V.l&&!n.read}).map(function(n){return'<div class="card" style="background:#fff8e1;border-color:#f9a825;color:#000"><div class="t">🔔 '+esc(n.text)+'<small style="color:#555">'+n.date.slice(0,16).replace('T',' ')+'</small></div><button class="s" style="color:#000;border-color:#000" onclick="readN(\''+n.id+'\')">تم ✓</button></div>'}).join('')+(mine.map(function(t){return'<div class="card" onclick="go({n:\'team\',t:\''+t.id+'\'})" style="cursor:pointer"><div class="t">👥 '+esc(t.name)+'<small>اضغط لعرض الكشافين</small></div>‹</div>'}).join('')||'<p class="center">لم يتم تعيينك في أي فرقة بعد</p>')+'</main>';
+ }
+ else if(V.n==='team'){
+  var tm=team(V.t),sc=S.scouts.filter(function(s){return s.teamId===V.t});
+  var mm=MSG;MSG='';h=bar(esc(tm.name),1)+'<main>'+(mm?'<p class="ok center">'+mm+'</p>':'')+(sc.map(function(s){return'<div class="card"><div class="t">🧒 '+esc(s.name)+'<small>'+esc(s.phone)+'</small></div><button class="d" onclick="delScout(\''+s.id+'\')">🗑</button></div>'}).join('')||'<p class="center">لا يوجد كشافون</p>')+
+   '<h2>إضافة كشاف</h2><input id="sn" placeholder="اسم الكشاف"><input id="sp" type="tel" placeholder="رقم ولي الأمر (واتساب)"><button class="b" style="background:transparent;color:var(--pri);border:1px solid var(--pri)" onclick="addScout()">＋ إضافة</button>'+
+   '<button class="b" onclick="go({n:\'type\',t:\''+V.t+'\'})">✅ تسجيل الحضور</button></main>';
+ }
+ else if(V.n==='type'){
+  h=bar('اختر نوع الحصة',1)+'<main>'+[['lesson','📖'],['survey','🔍'],['trip','🚌']].map(function(x){return'<div class="card" style="cursor:pointer;font-size:20px" onclick="go({n:\'att\',t:\''+V.t+'\',ty:\''+x[0]+'\'})"><div class="t">'+x[1]+' '+TL[x[0]]+'</div>‹</div>'}).join('')+'</main>';
+ }
+ else if(V.n==='att'){
+  var trip=V.ty==='trip',sc2=S.scouts.filter(function(s){return s.teamId===V.t});
+  h=bar('تسجيل: '+TL[V.ty],1)+'<main><input id="at" placeholder="عنوان '+TL[V.ty]+' (اختياري)">'+(trip?'<input id="ad" placeholder="وجهة الرحلة">':'')+'<input id="adt" type="date" value="'+new Date().toISOString().slice(0,10)+'">'+
+   (sc2.map(function(s){return'<div class="card att"><div class="t"><b>'+esc(s.name)+'</b></div><button class="wa" id="wb'+s.id+'" style="display:none;border:0;cursor:pointer" onclick="sendWa(\''+s.id+'\')">📨 إشعار</button><div class="seg" id="sg'+s.id+'">'+segHtml(s.id,trip)+'</div></div>'}).join('')||'<p class="center">أضف كشافين أولاً</p>')+
+   '<button class="b" onclick="saveAtt()">💾 حفظ الحضور</button></main>';
+ }
+ else if(V.n==='notify'){
+  h=bar('تم الحفظ ✅',0)+'<main>'+(V.list.length?'<h2>إشعار أولياء أمور الغائبين عبر واتساب</h2>'+V.list.map(function(x){return'<div class="card"><div class="t">'+esc(x.name)+'</div><a class="wa" target="_blank" rel="noopener" href="'+x.url+'">إرسال واتساب</a></div>'}).join(''):'<p class="center">لا يوجد غائبون 🎉</p>')+'<button class="b" onclick="back()">إغلاق</button></main>';
+ }
+ $('app').innerHTML=h;
+}
+function agg(list){var r={p:0,l:0,a:0};list.forEach(function(x){for(var k in x.records){var v=x.records[k];if(v==='late')r.l++;else if(v==='absent')r.a++;else r.p++}});r.t=r.p+r.l+r.a;return r}
+function statRow(lbl,r){
+ if(!r.t)return'<div class="st"><b>'+lbl+'</b><small>لا توجد بيانات</small></div>';
+ var pc=function(n){return Math.round(n*100/r.t)};
+ return'<div class="st"><b>'+lbl+'</b><span style="float:left;color:var(--mut);font-size:13px">'+r.t+' تسجيل</span><div class="bar"><i style="width:'+r.p*100/r.t+'%;background:var(--pri)"></i><i style="width:'+r.l*100/r.t+'%;background:#f9a825"></i><i style="width:'+r.a*100/r.t+'%;background:var(--red)"></i></div><small>حاضر '+pc(r.p)+'% ('+r.p+') · متأخر '+pc(r.l)+'% ('+r.l+') · غائب '+pc(r.a)+'% ('+r.a+')</small></div>';
+}
+function genSample(){
+ if(!AU||AU.role!=='admin')return;
+ S.teams.forEach(function(t){var sc=S.scouts.filter(function(x){return x.teamId===t.id});if(!sc.length)return;
+  for(var i=0;i<12;i++){var rec={};sc.forEach(function(x){var r=Math.random();rec[x.id]=r<.7?'present':r<.85?'late':'absent'});
+   S.sessions.push({teamId:t.id,type:'lesson',title:'',destination:'',date:new Date(Date.now()-i*86400000).toISOString().slice(0,10),records:rec})}});
+ save();R();
+}
+function todayBox(){
+ var d=new Date().toISOString().slice(0,10);
+ return'<h2>📅 تسجيل الحضور اليوم ('+d+')</h2>'+(S.teams.map(function(t){
+  var ss=S.sessions.filter(function(x){return x.teamId===t.id&&x.date===d}),done=ss.length>0;
+  var sent=S.notices.some(function(n){return n.teamId===t.id&&n.date.slice(0,10)===d});
+  return'<div class="card"><div class="t">'+esc(t.name)+'<small class="'+(done?'ok':'no')+'">'+(done?'✅ تم تسجيل الحضور ('+ss.length+' تسجيل)':'❌ لم يُسجَّل الحضور بعد')+'</small>'+(sent&&!done?'<small>🔔 أُرسل تذكير اليوم</small>':'')+'</div>'+(done?'':'<button class="s" onclick="remind(\''+t.id+'\')">🔔 تذكير القائد</button>')+'</div>'}).join('')||'<p class="center">لا توجد فرق</p>');
+}
+function remind(tid){
+ if(!AU||AU.role!=='admin')return;var t=team(tid);
+ if(!t.leaders.length){MSG='لا يوجد قائد معيّن لهذه الفرقة، عيّن قائداً أولاً';return R()}
+ t.leaders.forEach(function(l){S.notices.push({id:uid(),to:l,teamId:tid,text:'تذكير من الإدارة: لم يتم تسجيل حضور '+t.name+' اليوم. الرجاء تسجيل الحضور.',date:new Date().toISOString(),read:false})});
+ save();MSG='تم إرسال التذكير إلى قائد '+t.name+' ✅';R();
+}
+function readN(id){var n=S.notices.find(function(x){return x.id===id&&AU&&x.to===AU.id});if(n){n.read=true;save();R()}}
+function excelBox(){
+ var o=S.teams.map(function(t){return'<option value="'+t.id+'">'+esc(t.name)+'</option>'}).join(''),d=new Date().toISOString().slice(0,10),m=d.slice(0,8)+'01';
+ return'<h2>📥 إضافة كشافين من Excel</h2><div class="st"><select id="xt">'+o+'</select><input id="xf" type="file" accept=".xlsx,.xls,.csv"><small>العمود الأول: الاسم — العمود الثاني: رقم ولي الأمر</small><button class="b" onclick="importXlsx()">استيراد الأسماء</button><button class="s" style="margin-top:8px" onclick="tplXlsx()">تحميل نموذج الملف</button></div>'+
+ '<h2>📤 تصدير الحضور والغياب إلى Excel</h2><div class="st"><select id="xe"><option value="all">جميع الفرق</option>'+o+'</select><div class="row"><input id="xd1" type="date" value="'+m+'"><input id="xd2" type="date" value="'+d+'"></div><small>من تاريخ — إلى تاريخ</small><button class="b" onclick="exportXlsx()">تنزيل ملف Excel</button></div>';
+}
+function needX(){if(typeof XLSX==='undefined'){MSG='مكتبة Excel لم تُحمَّل، تحقق من الاتصال بالإنترنت';R();return true}return false}
+function tplXlsx(){
+ if(!AU||AU.role!=='admin'||needX())return;
+ var ws=XLSX.utils.aoa_to_sheet([['الاسم','رقم ولي الأمر'],['محمد','0551234567'],['أمين','0661234567']]),wb=XLSX.utils.book_new();
+ ws['!cols']=[{wch:25},{wch:20}];XLSX.utils.book_append_sheet(wb,ws,'الكشافون');XLSX.writeFile(wb,'نموذج_الكشافين.xlsx');
+}
+function importXlsx(){
+ if(!AU||AU.role!=='admin'||needX())return;
+ var f=$('xf').files[0],tid=$('xt').value;
+ if(!f||!tid){MSG='اختر الفرقة وملف Excel أولاً';return R()}
+ var rd=new FileReader();
+ rd.onload=function(e){
+  try{
+   var wb=XLSX.read(e.target.result,{type:'array'}),ws=wb.Sheets[wb.SheetNames[0]];
+   var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''}),n=0,dup=0,bad=0;
+   rows.forEach(function(r,i){
+    var name=String(r[0]||'').trim(),ph=String(r[1]||'').trim();
+    if(i===0&&/اسم|name/i.test(name))return;
+    if(!name&&!ph)return;
+    if(!name||!ph){bad++;return}
+    if(S.scouts.some(function(x){return x.teamId===tid&&x.name===name&&x.phone===ph})){dup++;return}
+    S.scouts.push({id:uid(),teamId:tid,name:name,phone:ph});n++;
+   });
+   save();MSG='تمت إضافة '+n+' كشاف'+(dup?' — تخطّي '+dup+' مكرر':'')+(bad?' — '+bad+' صف ناقص':'');
+  }catch(err){MSG='تعذّر قراءة الملف'}
+  R();
+ };
+ rd.readAsArrayBuffer(f);
+}
+function exportXlsx(){
+ if(!AU||AU.role!=='admin'||needX())return;
+ var a=$('xd1').value,b=$('xd2').value,tid=$('xe').value;
+ if(!a||!b||a>b){MSG='حدّد فترة صحيحة (من ≤ إلى)';return R()}
+ var ss=S.sessions.filter(function(x){return x.date>=a&&x.date<=b&&(tid==='all'||x.teamId===tid)}).sort(function(x,y){return x.date<y.date?-1:1});
+ if(!ss.length){MSG='لا توجد تسجيلات في هذه الفترة';return R()}
+ var L={present:'حاضر',late:'متأخر',absent:'غائب'},det=[['التاريخ','الفرقة','النوع','العنوان','الكشاف','رقم ولي الأمر','الحالة']],sum={};
+ ss.forEach(function(x){var tn=(team(x.teamId)||{name:'—'}).name;
+  for(var id in x.records){var sc=S.scouts.find(function(z){return z.id===id})||{name:'(محذوف)',phone:'',teamId:x.teamId},st=x.records[id];
+   det.push([x.date,tn,TL[x.type]||x.type,x.title||'',sc.name,sc.phone,L[st]||st]);
+   var r=sum[id]=sum[id]||{t:tn,n:sc.name,ph:sc.phone,p:0,l:0,a:0};
+   if(st==='late')r.l++;else if(st==='absent')r.a++;else r.p++;}});
+ var sm=[['الفرقة','الكشاف','رقم ولي الأمر','حاضر','متأخر','غائب','المجموع','نسبة الحضور %','نسبة الغياب %']];
+ Object.keys(sum).map(function(k){return sum[k]}).sort(function(x,y){return x.t===y.t?(x.n<y.n?-1:1):(x.t<y.t?-1:1)}).forEach(function(r){var t=r.p+r.l+r.a;sm.push([r.t,r.n,r.ph,r.p,r.l,r.a,t,Math.round(r.p*100/t),Math.round(r.a*100/t)])});
+ var wb=XLSX.utils.book_new(),w1=XLSX.utils.aoa_to_sheet(sm),w2=XLSX.utils.aoa_to_sheet(det);
+ w1['!cols']=[{wch:18},{wch:22},{wch:16},{wch:8},{wch:8},{wch:8},{wch:8},{wch:14},{wch:14}];
+ w2['!cols']=[{wch:12},{wch:18},{wch:10},{wch:20},{wch:22},{wch:16},{wch:10}];
+ XLSX.utils.book_append_sheet(wb,w1,'ملخص');XLSX.utils.book_append_sheet(wb,w2,'تفصيلي');
+ wb.Workbook={Views:[{RTL:true}]};
+ XLSX.writeFile(wb,'الحضور_'+a+'_إلى_'+b+'.xlsx');
+ MSG='تم تجهيز الملف ✅';R();
+}
+async function setup(){
+ var u=val('su').toLowerCase(),a=$('sp1').value,b=$('sp2').value;
+ if(u.length<3){LE='اسم المستخدم 3 أحرف على الأقل';return R()}
+ if(a.length<6){LE='كلمة المرور 6 أحرف على الأقل';return R()}
+ if(a!==b){LE='كلمتا المرور غير متطابقتين';return R()}
+ var salt=uid()+uid();S.admin={user:u,salt:salt,hash:await hp(salt,a)};save();LE='';R();
+}
+async function doLogin(){
+ if(Date.now()<LOCK){LE='محاولات كثيرة، انتظر '+Math.ceil((LOCK-Date.now())/1000)+' ثانية';return R()}
+ var u=val('lu').toLowerCase(),p=$('lp').value;
+ if(u===S.admin.user&&await hp(S.admin.salt,p)===S.admin.hash){AU={role:'admin'};FAIL=0;LE='';H=[];V={n:'admin'};return R()}
+ var l=S.leaders.find(function(x){return x.user===u});
+ if(l&&await hp(l.salt,p)===l.hash){AU={role:'leader',id:l.id};FAIL=0;LE='';H=[];V={n:'leader',l:l.id};return R()}
+ FAIL++;if(FAIL>=5){LOCK=Date.now()+30000;FAIL=0}
+ LE='اسم المستخدم أو كلمة المرور غير صحيحة';R();
+}
+async function addLeader(){
+ if(!AU||AU.role!=='admin')return;
+ var n=val('ln'),u=val('lu2').toLowerCase(),p=$('lp2').value;
+ if(!n||u.length<3){LE='أدخل الاسم واسم مستخدم (3 أحرف+)';return R()}
+ if(p.length<6){LE='كلمة المرور 6 أحرف على الأقل';return R()}
+ if(u===S.admin.user||S.leaders.some(function(x){return x.user===u})){LE='اسم المستخدم مستخدم مسبقاً';return R()}
+ var salt=uid()+uid();S.leaders.push({id:uid(),name:n,user:u,salt:salt,hash:await hp(salt,p)});save();LE='';R();
+}
+async function resetPw(id){
+ var p=prompt('كلمة المرور الجديدة (6+ أحرف)');if(!p||p.length<6)return;
+ var l=S.leaders.find(function(x){return x.id===id});l.salt=uid()+uid();l.hash=await hp(l.salt,p);save();alert('تم تغيير كلمة المرور');
+}
+function delLeader(id){if(!confirm('حذف حساب القائد؟'))return;S.leaders=S.leaders.filter(function(l){return l.id!==id});S.teams.forEach(function(t){t.leaders=t.leaders.filter(function(x){return x!==id})});save();R()}
+function addTeam(){var n=val('tn');if(!n)return;S.teams.push({id:uid(),name:n,leaders:[]});save();R()}
+function tgl(t,l,on){var tm=team(t),i=tm.leaders.indexOf(l);if(on&&i<0)tm.leaders.push(l);if(!on&&i>-1)tm.leaders.splice(i,1);save()}
+function addScout(){var n=val('sn'),p=val('sp');if(!n||!p)return;S.scouts.push({id:uid(),teamId:V.t,name:n,phone:p});save();R()}
+function delScout(id){S.scouts=S.scouts.filter(function(s){return s.id!==id});save();R()}
+function segHtml(id,trip){
+ var o=trip?[['present','حاضر',''],['absent','غائب','a']]:[['present','حاضر',''],['late','متأخر','l'],['absent','غائب','a']],cur=ST[id]||'present';
+ return o.map(function(x){return'<button class="'+(cur===x[0]?'on ':'')+x[2]+'" onclick="setSt(\''+id+'\',\''+x[0]+'\')">'+x[1]+'</button>'}).join('');
+}
+function setSt(id,v){ST[id]=v;$('sg'+id).innerHTML=segHtml(id,V.ty==='trip');$('wb'+id).style.display=v==='present'?'none':'inline-block'}
+function msgFor(sc,st){
+ var title=val('at'),tt=title?' "'+title+'"':'',date=val('adt').replace(/-/g,'/'),tm=team(V.t).name,dest=V.ty==='trip'?val('ad'):'';
+ var head='السلام عليكم ورحمة الله،\nنفيدكم بأن الكشاف '+sc.name+' ',tail=' بتاريخ '+date+' (فرقة '+tm+').\nشكراً لكم على حسن تعاونكم 😊';
+ if(V.ty==='trip')return head+'تغيّب عن رحلة'+tt+(dest?' إلى '+dest:'')+tail;
+ return head+(st==='late'?'تأخر عن ':'تغيّب عن ')+TL[V.ty]+tt+tail;
+}
+function sendWa(id){
+ var sc=S.scouts.find(function(x){return x.id===id}),st=ST[id]||'present';if(st==='present')return;
+ window.open('https://wa.me/'+norm(sc.phone)+'?text='+encodeURIComponent(msgFor(sc,st)),'_blank');
+}
+function norm(p){p=p.replace(/[^0-9+]/g,'');if(p[0]==='+')return p.slice(1);if(p.slice(0,2)==='00')return p.slice(2);if(p[0]==='0')return CC+p.slice(1);if(p.length===9)return CC+p;return p}
+function saveAtt(){
+ var sc=S.scouts.filter(function(s){return s.teamId===V.t});if(!sc.length)return;
+ var rec={};sc.forEach(function(s){rec[s.id]=ST[s.id]||'present'});
+ S.sessions.push({teamId:V.t,type:V.ty,title:val('at'),destination:V.ty==='trip'?val('ad'):'',date:val('adt'),records:rec});save();
+ H.pop();V=H.pop()||{n:'login'};MSG='تم حفظ الحضور ✅';R();
+}
+R();
+</script>
+</body>
+</html>
