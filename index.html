@@ -3,12 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>حضوري</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
-</script>
-<title>التطبيق الكشفي — نسخة تجريبية</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="حضوري">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 <meta name="theme-color" content="#1f5f2e">
 <style>
@@ -126,7 +127,7 @@ function R(){
  var h='';
  if(!CONFIGURED){h=bar('إعداد ناقص')+'<main><div class="big">⚠️</div><p class="center">لم يتم لصق رابط Supabase والمفتاح داخل الملف بعد.</p></main>'}
  else if(V.n==='login'){
-  h=bar('التطبيق الكشفي')+'<main><div class="big">⚜️</div><p class="center">تسجيل الدخول</p><input id="lu" placeholder="اسم المستخدم أو البريد" autocomplete="username" autocapitalize="none"><input id="lp" type="password" placeholder="كلمة المرور" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')doLogin()"><div class="no center">'+LE+'</div><button class="b" onclick="doLogin()">دخول</button><p class="note">حسابات القادة تنشئها الإدارة فقط</p></main>';
+  h=bar('حضوري')+'<main><div class="big" style="overflow:hidden;padding:0"><img src="icon-192.png" alt="" style="width:100%;height:100%;object-fit:cover"></div><p class="center">تسجيل الدخول</p><input id="lu" placeholder="اسم المستخدم أو البريد" autocomplete="username" autocapitalize="none"><input id="lp" type="password" placeholder="كلمة المرور" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')doLogin()"><div class="no center">'+LE+'</div><button class="b" onclick="doLogin()">دخول</button><p class="note">حسابات القادة تنشئها الإدارة فقط</p></main>';
  }
  else if(V.n==='admin'){
   var am=MSG;MSG='';h=bar('لوحة الإدارة',0,1)+'<main>'+(am?'<p class="ok center">'+am+'</p>':'')+'<button class="b" style="margin:0 0 6px" onclick="go({n:\'stats\'})">📊 الإحصائيات</button>'+todayBox()+excelBox()+'<h2>الفرق</h2>'+
@@ -297,6 +298,7 @@ async function saveAtt(){
  BUSY=false;H.pop();V=H.pop()||{n:'login'};MSG='تم حفظ الحضور ✅';R();
 }
 init();
+if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
 </script>
 </body>
 </html>
