@@ -69,6 +69,8 @@ var SUPABASE_URL='https://xecbmixccrvkawpfznrx.supabase.co';
 var SUPABASE_KEY='sb_publishable_aezjHAQ1z5Cvnba8_0FDcw_GHnXHYR3';
 // ================================================
 var CC='213';
+var VAPID_PUBLIC='BO9FMYfry0vQcHwvcG888y2oroiXGQYt-uSvv1oZIBmXQJcnw4IMRlRmRz7UzDHcWifR6HopHtOC3KgrxD0DJ7Q';
+var PUSH='checking';
 var $=function(s){return document.getElementById(s)};
 var uid=function(){return Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,8)};
 var CONFIGURED=SUPABASE_URL.indexOf('http')===0&&SUPABASE_KEY.length>20;
@@ -99,7 +101,7 @@ async function enter(user){
  if(!p.data){await sb.auth.signOut();LE='هذا الحساب غير مفعّل في التطبيق';V={n:'login'};return R()}
  AU={role:p.data.role,id:user.id,name:p.data.name};
  try{await loadAll()}catch(e){}
- H=[];V=AU.role==='admin'?{n:'admin'}:{n:'leader',l:AU.id};LE='';R();
+ H=[];V=AU.role==='admin'?{n:'admin'}:{n:'leader',l:AU.id};LE='';R();if(AU.role==='leader')checkPush();
 }
 async function doLogin(){
  var u=val('lu'),p=$('lp').value;if(!u||!p){LE='أدخل اسم المستخدم وكلمة المرور';return R()}
@@ -149,7 +151,7 @@ function R(){
  }
  else if(V.n==='leader'){
   var mine=S.teams.filter(function(t){return t.leaders.indexOf(V.l)>-1});
-  h=bar('فرقي',0,1)+'<main>'+S.notices.filter(function(n){return n.to===V.l&&!n.read}).map(function(n){return'<div class="card" style="background:#fff8e1;border-color:#f9a825;color:#000"><div class="t">🔔 '+esc(n.text)+'<small style="color:#555">'+esc(n.date.slice(0,16).replace('T',' '))+'</small></div><button class="s" style="color:#000;border-color:#000" onclick="readN(\''+n.id+'\')">تم ✓</button></div>'}).join('')+(mine.map(function(t){return'<div class="card" onclick="go({n:\'team\',t:\''+t.id+'\'})" style="cursor:pointer"><div class="t">👥 '+esc(t.name)+'<small>'+secOf(t)[1]+' · اضغط لعرض الكشافين</small></div>‹</div>'}).join('')||'<p class="center">لم يتم تعيينك في أي فرقة بعد</p>')+'</main>';
+  h=bar('فرقي',0,1)+'<main>'+pushCard()+S.notices.filter(function(n){return n.to===V.l&&!n.read}).map(function(n){return'<div class="card" style="background:#fff8e1;border-color:#f9a825;color:#000"><div class="t">🔔 '+esc(n.text)+'<small style="color:#555">'+esc(n.date.slice(0,16).replace('T',' '))+'</small></div><button class="s" style="color:#000;border-color:#000" onclick="readN(\''+n.id+'\')">تم ✓</button></div>'}).join('')+(mine.map(function(t){return'<div class="card" onclick="go({n:\'team\',t:\''+t.id+'\'})" style="cursor:pointer"><div class="t">👥 '+esc(t.name)+'<small>'+secOf(t)[1]+' · اضغط لعرض الكشافين</small></div>‹</div>'}).join('')||'<p class="center">لم يتم تعيينك في أي فرقة بعد</p>')+'</main>';
  }
  else if(V.n==='team'){
   var tm=team(V.t),sc=S.scouts.filter(function(s){return s.teamId===V.t});
@@ -185,7 +187,8 @@ async function remind(tid){
  if(!AU||AU.role!=='admin')return;var t=team(tid);
  if(!t.leaders.length){MSG='لا يوجد قائد معيّن لهذه الفرقة، عيّن قائداً أولاً';return R()}
  await q(sb.from('notices').insert(t.leaders.map(function(l){return{to_leader:l,team_id:tid,text:'تذكير من الإدارة: لم يتم تسجيل حضور '+t.name+' اليوم. الرجاء تسجيل الحضور.'}})));
- await loadAll();MSG='تم إرسال التذكير إلى قائد '+t.name+' ✅';R();
+ var pm='';try{var pr=await sb.functions.invoke('send-push',{body:{leaders:t.leaders,title:'حضوري',body:'تذكير من الإدارة: لم يتم تسجيل حضور '+t.name+' اليوم'}});if(pr.data&&pr.data.sent)pm=' — وصل إشعار فوري إلى '+pr.data.sent+' جهاز'}catch(e){}
+ await loadAll();MSG='تم إرسال التذكير إلى قائد '+t.name+' ✅'+pm;R();
 }
 async function readN(id){await q(sb.from('notices').update({read:true}).eq('id',id));await loadAll();R()}
 function excelBox(){
@@ -296,6 +299,32 @@ async function saveAtt(){
  BUSY=true;
  try{await q(sb.from('sessions').insert({team_id:V.t,type:V.ty,title:val('at'),destination:V.ty==='trip'?val('ad'):'',date:d,records:rec}));await loadAll()}catch(e){BUSY=false;return}
  BUSY=false;H.pop();V=H.pop()||{n:'login'};MSG='تم حفظ الحضور ✅';R();
+}
+
+function b64u(b){var p='='.repeat((4-b.length%4)%4),s=(b+p).replace(/-/g,'+').replace(/_/g,'/'),r=atob(s),a=new Uint8Array(r.length);for(var i=0;i<r.length;i++)a[i]=r.charCodeAt(i);return a}
+async function checkPush(){
+ try{
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){PUSH='unsupported'}
+  else{var reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();PUSH=(sub&&Notification.permission==='granted')?'on':'off'}
+ }catch(e){PUSH='unsupported'}
+ if(V.n==='leader')R();
+}
+function pushCard(){
+ if(PUSH==='on')return'<p class="ok center" style="font-size:13px;margin:0 0 10px">🔔 الإشعارات مفعّلة على هذا الجهاز</p>';
+ if(PUSH==='off')return'<div class="card"><div class="t">🔔 فعّل إشعارات التذكير<small>ليصلك التذكير حتى والتطبيق مغلق</small></div><button class="s" onclick="enablePush()">تفعيل</button></div>';
+ if(PUSH==='unsupported')return'<div class="card"><div class="t">🔔 الإشعارات<small>لتفعيلها ثبّت التطبيق على الشاشة الرئيسية ثم افتحه منها</small></div></div>';
+ return'';
+}
+async function enablePush(){
+ try{
+  var perm=await Notification.requestPermission();
+  if(perm!=='granted'){alert('لم يتم السماح بالإشعارات. فعّلها من إعدادات المتصفح أو التطبيق.');return}
+  var reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
+  if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(VAPID_PUBLIC)});
+  var j=sub.toJSON();
+  await q(sb.rpc('save_push_sub',{p_endpoint:j.endpoint,p_p256dh:j.keys.p256dh,p_auth:j.keys.auth}));
+  PUSH='on';R();
+ }catch(e){alert('تعذّر تفعيل الإشعارات: '+(e.message||e))}
 }
 init();
 if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
