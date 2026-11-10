@@ -70,7 +70,7 @@ var SUPABASE_KEY='sb_publishable_aezjHAQ1z5Cvnba8_0FDcw_GHnXHYR3';
 // ================================================
 var CC='213';
 var VAPID_PUBLIC='BO9FMYfry0vQcHwvcG888y2oroiXGQYt-uSvv1oZIBmXQJcnw4IMRlRmRz7UzDHcWifR6HopHtOC3KgrxD0DJ7Q';
-var PUSH='checking';
+var PUSH='checking',NOTIFY={ctx:null,list:[]};
 var $=function(s){return document.getElementById(s)};
 var uid=function(){return Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,8)};
 var CONFIGURED=SUPABASE_URL.indexOf('http')===0&&SUPABASE_KEY.length>20;
@@ -165,8 +165,12 @@ function R(){
  else if(V.n==='att'){
   var trip=V.ty==='trip',sc2=S.scouts.filter(function(s){return s.teamId===V.t});
   h=bar('تسجيل: '+TL[V.ty],1)+'<main><input id="at" placeholder="عنوان '+TL[V.ty]+' (اختياري)">'+(trip?'<input id="ad" placeholder="وجهة الرحلة">':'')+'<input id="adt" type="date" value="'+new Date().toISOString().slice(0,10)+'">'+
-   (sc2.map(function(s){return'<div class="card att"><div class="t"><b>'+esc(s.name)+'</b></div><button class="wa" id="wb'+s.id+'" style="display:none;border:0;cursor:pointer" onclick="sendWa(\''+s.id+'\')">📨 إشعار</button><div class="seg" id="sg'+s.id+'">'+segHtml(s.id,trip)+'</div></div>'}).join('')||'<p class="center">أضف كشافين أولاً</p>')+
+   (sc2.map(function(s){return'<div class="card att"><div class="t"><b>'+esc(s.name)+'</b></div><div class="seg" id="sg'+s.id+'">'+segHtml(s.id,trip)+'</div></div>'}).join('')||'<p class="center">أضف كشافين أولاً</p>')+
    '<button class="b" onclick="saveAtt()">💾 حفظ الحضور</button></main>';
+ }
+ else if(V.n==='notify'){
+  var NL=NOTIFY.list;
+  h=bar('تم حفظ الحضور ✅',1)+'<main>'+(NL.length?'<p class="center">أرسل إشعاراً لأولياء أمور الغائبين والمتأخرين:</p>'+NL.map(function(x){return'<div class="card"><div class="t">'+esc(x.name)+'<small>'+(x.st==='late'?'متأخر':'غائب')+'</small></div><button class="wa" style="border:0;cursor:pointer'+(x.sent?';opacity:.55':'')+'" onclick="sendNote(\''+x.id+'\')">'+(x.sent?'✓ أُرسل':'📨 واتساب')+'</button></div>'}).join(''):'<p class="center">لا يوجد غائبون أو متأخرون 🎉</p>')+'<button class="b" onclick="back()">إغلاق</button></main>';
  }
  $('app').innerHTML=h;
 }
@@ -279,16 +283,17 @@ function segHtml(id,trip){
  var o=trip?[['present','حاضر',''],['absent','غائب','a']]:[['present','حاضر',''],['late','متأخر','l'],['absent','غائب','a']],cur=ST[id]||'present';
  return o.map(function(x){return'<button class="'+(cur===x[0]?'on ':'')+x[2]+'" onclick="setSt(\''+id+'\',\''+x[0]+'\')">'+x[1]+'</button>'}).join('');
 }
-function setSt(id,v){ST[id]=v;$('sg'+id).innerHTML=segHtml(id,V.ty==='trip');$('wb'+id).style.display=v==='present'?'none':'inline-block'}
-function msgFor(sc,st){
- var title=val('at'),tt=title?' "'+title+'"':'',date=val('adt').replace(/-/g,'/'),tmo=team(V.t),tm=tmo.name,sec=secOf(tmo),dest=V.ty==='trip'?val('ad'):'';
+function setSt(id,v){ST[id]=v;$('sg'+id).innerHTML=segHtml(id,V.ty==='trip')}
+function msgFor(sc,st,c){
+ var tmo=team(c.t),tm=tmo.name,sec=secOf(tmo),date=c.date.replace(/-/g,'/'),tt=c.title?' "'+c.title+'"':'';
  var head='السلام عليكم ورحمة الله،\nنفيدكم بأن ال'+sec[0]+' '+sc.name+' ',tail=' بتاريخ '+date+' (فرقة '+tm+' — '+sec[1]+').\nشكراً لكم على حسن تعاونكم 😊';
- if(V.ty==='trip')return head+'تغيّب عن رحلة'+tt+(dest?' إلى '+dest:'')+tail;
- return head+(st==='late'?'تأخر عن ':'تغيّب عن ')+TL[V.ty]+tt+tail;
+ if(c.ty==='trip')return head+'تغيّب عن رحلة'+tt+(c.dest?' إلى '+c.dest:'')+tail;
+ return head+(st==='late'?'تأخر عن ':'تغيّب عن ')+TL[c.ty]+tt+tail;
 }
-function sendWa(id){
- var sc=S.scouts.find(function(x){return x.id===id}),st=ST[id]||'present';if(st==='present')return;
- window.open('https://wa.me/'+norm(sc.phone)+'?text='+encodeURIComponent(msgFor(sc,st)),'_blank');
+function sendNote(id){
+ var x=NOTIFY.list.find(function(z){return z.id===id});if(!x)return;
+ window.open('https://wa.me/'+norm(x.phone)+'?text='+encodeURIComponent(msgFor(x,x.st,NOTIFY.ctx)),'_blank');
+ x.sent=true;R();
 }
 function norm(p){p=p.replace(/[^0-9+]/g,'');if(p[0]==='+')return p.slice(1);if(p.slice(0,2)==='00')return p.slice(2);if(p[0]==='0')return CC+p.slice(1);if(p.length===9)return CC+p;return p}
 async function saveAtt(){
@@ -296,11 +301,13 @@ async function saveAtt(){
  var sc=S.scouts.filter(function(s){return s.teamId===V.t});if(!sc.length)return;
  var rec={};sc.forEach(function(s){rec[s.id]=ST[s.id]||'present'});
  var d=val('adt');if(!d){alert('اختر التاريخ');return}
+ var ctx={t:V.t,ty:V.ty,title:val('at'),date:d,dest:V.ty==='trip'?val('ad'):''};
  BUSY=true;
- try{await q(sb.from('sessions').insert({team_id:V.t,type:V.ty,title:val('at'),destination:V.ty==='trip'?val('ad'):'',date:d,records:rec}));await loadAll()}catch(e){BUSY=false;return}
- BUSY=false;H.pop();V=H.pop()||{n:'login'};MSG='تم حفظ الحضور ✅';R();
+ try{await q(sb.from('sessions').insert({team_id:ctx.t,type:ctx.ty,title:ctx.title,destination:ctx.dest,date:d,records:rec}));await loadAll()}catch(e){BUSY=false;return}
+ BUSY=false;
+ NOTIFY={ctx:ctx,list:sc.filter(function(x){return rec[x.id]!=='present'}).map(function(x){return{id:x.id,name:x.name,phone:x.phone,st:rec[x.id],sent:false}})};
+ H.pop();V={n:'notify'};R();
 }
-
 function b64u(b){var p='='.repeat((4-b.length%4)%4),s=(b+p).replace(/-/g,'+').replace(/_/g,'/'),r=atob(s),a=new Uint8Array(r.length);for(var i=0;i<r.length;i++)a[i]=r.charCodeAt(i);return a}
 async function checkPush(){
  try{
