@@ -57,11 +57,13 @@ p.center{color:var(--mut)}
 .bar i{display:block;height:100%}
 .st small{color:var(--mut);display:block;font-size:13px}
 .wa{background:#25d366;color:#fff;text-decoration:none;padding:8px 14px;border-radius:999px;font-size:14px;font-weight:700}
+#net{position:fixed;bottom:0;left:0;right:0;z-index:20;max-width:560px;margin:auto;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));background:#b26a00;color:#fff;font-weight:700;font-size:14px;text-align:center;display:none}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.50.0/dist/umd/supabase.min.js"></script>
 </head>
 <body>
+<div id="net"></div>
 <div id="app"></div>
 <script>
 // ====== الصق هنا بيانات مشروعك من Supabase ======
@@ -80,7 +82,20 @@ var V={n:'login'},H=[],ST={},AU=null,MSG='',LE='',BUSY=false,TL={lesson:'حصة'
 function secOf(t){return SEC[t.section]||SEC.scout}
 function secOpts(id){return'<select id="'+id+'">'+Object.keys(SEC).map(function(k){return'<option value="'+k+'">'+SEC[k][1]+'</option>'}).join('')+'</select>'}
 function toEmail(u){u=u.trim().toLowerCase();return u.indexOf('@')>-1?u:u+'@scout.app'}
-async function q(p){var r=await p;if(r.error){alert('خطأ: '+r.error.message);throw r.error}return r.data}
+var QUIET=false,SYNCING=false;
+function lsGet(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function lsDel(k){try{localStorage.removeItem(k)}catch(e){}}
+function isNet(e){return !!e&&/fetch|network|load failed|timeout|offline/i.test((e.message||'')+' '+(e.name||''))}
+function uuid(){return(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return(c==='x'?r:(r&3|8)).toString(16)})}
+function updateNet(){
+ var el=$('net');if(!el)return;
+ var n=AU?(lsGet('hz_queue')||[]).filter(function(x){return x.uid===AU.id}).length:0,t=[];
+ if(!navigator.onLine)t.push('📴 لا يوجد اتصال — الحضور يُحفظ على الهاتف');
+ if(n)t.push('⏳ '+n+' تسجيل بانتظار الإرسال');
+ el.style.display=t.length?'block':'none';el.textContent=t.join(' · ');
+}
+async function q(p){var r=await p;if(r.error){if(isNet(r.error)){if(!QUIET)alert('لا يوجد اتصال بالإنترنت. هذه العملية تحتاج اتصالاً.')}else alert('خطأ: '+r.error.message);throw r.error}return r.data}
 async function loadAll(){
  var r=await Promise.all([q(sb.from('teams').select('*').order('name')),q(sb.from('profiles').select('*')),q(sb.from('team_leaders').select('*')),q(sb.from('scouts').select('*').order('name')),q(sb.from('sessions').select('*')),q(sb.from('notices').select('*').order('created_at',{ascending:false}))]);
  var tl=r[2];
@@ -89,19 +104,31 @@ async function loadAll(){
  S.scouts=r[3].map(function(s){return{id:s.id,teamId:s.team_id,name:s.name,phone:s.phone}});
  S.sessions=r[4].map(function(s){return{teamId:s.team_id,type:s.type,title:s.title,destination:s.destination,date:s.date,records:s.records}});
  S.notices=r[5].map(function(n){return{id:n.id,to:n.to_leader,teamId:n.team_id,text:n.text,date:n.created_at,read:n.read}});
+ if(AU)lsSet('hz_snap',{uid:AU.id,S:S});
 }
 async function init(){
  if(!CONFIGURED){R();return}
- var s=await sb.auth.getSession();
- if(!s.data.session){R();return}
- await enter(s.data.session.user);
+ var sess=null,err=null;
+ try{var g=await sb.auth.getSession();sess=g.data&&g.data.session;err=g.error}catch(e){err=e}
+ if(sess){await enter(sess.user);return}
+ var cu=lsGet('hz_user');
+ if(cu&&(!navigator.onLine||isNet(err))){await enter({id:cu.id},cu);return}
+ R();
 }
-async function enter(user){
- var p=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
- if(!p.data){await sb.auth.signOut();LE='هذا الحساب غير مفعّل في التطبيق';V={n:'login'};return R()}
- AU={role:p.data.role,id:user.id,name:p.data.name};
- try{await loadAll()}catch(e){}
- H=[];V=AU.role==='admin'?{n:'admin'}:{n:'leader',l:AU.id};LE='';R();if(AU.role==='leader')checkPush();
+async function enter(user,cached){
+ var prof=cached||null;
+ if(!prof){
+  var p=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
+  prof=p.data;
+  if(!prof&&p.error&&isNet(p.error)){var cu=lsGet('hz_user');if(cu&&cu.id===user.id)prof=cu}
+  if(!prof){try{await sb.auth.signOut()}catch(e){}LE='هذا الحساب غير مفعّل في التطبيق';V={n:'login'};return R()}
+ }
+ AU={role:prof.role,id:user.id,name:prof.name};
+ lsSet('hz_user',{id:AU.id,role:AU.role,name:AU.name});
+ QUIET=true;
+ try{await loadAll()}catch(e){var sn=lsGet('hz_snap');if(sn&&sn.uid===AU.id&&sn.S)S=sn.S}
+ QUIET=false;
+ H=[];V=AU.role==='admin'?{n:'admin'}:{n:'leader',l:AU.id};LE='';R();updateNet();if(AU.role==='leader')checkPush();trySync();
 }
 async function doLogin(){
  var u=val('lu'),p=$('lp').value;if(!u||!p){LE='أدخل اسم المستخدم وكلمة المرور';return R()}
@@ -109,7 +136,11 @@ async function doLogin(){
  if(r.error){LE='فشل الدخول: '+r.error.message;return R()}
  await enter(r.data.user);
 }
-async function logout(){await sb.auth.signOut();AU=null;H=[];V={n:'login'};LE='';R()}
+async function logout(){
+ try{await sb.auth.signOut()}catch(e){}
+ try{Object.keys(localStorage).forEach(function(k){if(/^sb-.*-auth-token/.test(k))localStorage.removeItem(k)})}catch(e){}
+ lsDel('hz_user');lsDel('hz_snap');AU=null;H=[];V={n:'login'};LE='';R();updateNet();
+}
 function go(v){H.push(V);V=v;if(v.n==='att')ST={};R()}
 function back(){V=H.pop()||{n:'login'};R()}
 function bar(t,b,out){return'<header>'+(b?'<button class="ic" onclick="back()">→</button>':'')+'<h1>'+t+'</h1>'+(out?'<button class="ic" onclick="logout()">خروج</button>':'')+'</header>'}
@@ -119,7 +150,7 @@ function val(id){return $(id).value.trim()}
 function guard(){
  if(V.n==='login')return true;
  if(!AU)return false;
- if(['admin','assign','stats'].indexOf(V.n)>-1&&AU.role!=='admin')return false;
+ if(['admin','assign','stats','manage'].indexOf(V.n)>-1&&AU.role!=='admin')return false;
  if(['team','type','att'].indexOf(V.n)>-1&&AU.role==='leader'){var t=team(V.t);if(!t||t.leaders.indexOf(AU.id)<0)return false}
  if(V.n==='leader'&&AU.role==='leader'&&V.l!==AU.id)return false;
  return true;
@@ -132,11 +163,17 @@ function R(){
   h=bar('حضوري')+'<main><div class="big" style="overflow:hidden;padding:0"><img src="icon-192.png" alt="" style="width:100%;height:100%;object-fit:cover"></div><p class="center">تسجيل الدخول</p><input id="lu" placeholder="اسم المستخدم أو البريد" autocomplete="username" autocapitalize="none"><input id="lp" type="password" placeholder="كلمة المرور" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')doLogin()"><div class="no center">'+LE+'</div><button class="b" onclick="doLogin()">دخول</button><p class="note">حسابات القادة تنشئها الإدارة فقط</p></main>';
  }
  else if(V.n==='admin'){
-  var am=MSG;MSG='';h=bar('لوحة الإدارة',0,1)+'<main>'+(am?'<p class="ok center">'+am+'</p>':'')+'<button class="b" style="margin:0 0 6px" onclick="go({n:\'stats\'})">📊 الإحصائيات</button>'+todayBox()+excelBox()+'<h2>الفرق</h2>'+
+  var am=MSG;MSG='';h=bar('لوحة الإدارة',0,1)+'<main>'+(am?'<p class="ok center">'+am+'</p>':'')+'<button class="b" style="margin:0 0 6px" onclick="go({n:\'stats\'})">📊 الإحصائيات</button><button class="b" style="margin:0 0 6px;background:transparent;color:var(--pri);border:1.5px solid var(--pri);box-shadow:none" onclick="go({n:\'manage\'})">⚙️ إدارة الفرق والقادة</button>'+todayBox()+excelBox()+'<h2>الفرق</h2>'+
    (S.teams.map(function(t){return'<div class="card"><div class="t">🚩 '+esc(t.name)+'<small>القسم: '+secOf(t)[1]+' · عدد القادة: '+t.leaders.length+'</small></div><button class="s" onclick="go({n:\'assign\',t:\''+t.id+'\'})">القادة</button></div>'}).join('')||'<p class="center">لا توجد فرق</p>')+
    secOpts('ts')+'<div class="row"><input id="tn" placeholder="فرقة جديدة، مثال: فرقة النسور"><button class="s" onclick="addTeam()">إنشاء</button></div>'+
-   '<h2>حسابات القادة</h2>'+(S.leaders.map(function(l){return'<div class="card"><div class="t">👤 '+esc(l.name)+'<small>المستخدم: '+esc(l.user)+'</small></div><button class="d" onclick="delLeader(\''+l.id+'\')">🗑</button></div>'}).join('')||'<p class="center">لا يوجد قادة</p>')+
+   '<h2>حسابات القادة</h2>'+(S.leaders.map(function(l){return'<div class="card"><div class="t">👤 '+esc(l.name)+'<small>المستخدم: '+esc(l.user)+'</small></div></div>'}).join('')||'<p class="center">لا يوجد قادة</p>')+
    '<input id="ln" placeholder="اسم القائد"><input id="lu2" placeholder="اسم المستخدم (إنجليزي بدون مسافات)" autocapitalize="none" autocomplete="off"><input id="lp2" type="password" placeholder="كلمة المرور (6+ أحرف)" autocomplete="new-password"><div class="no center">'+LE+'</div><button class="b" onclick="addLeader()">＋ إنشاء حساب قائد</button></main>';
+ }
+ else if(V.n==='manage'){
+  var mg=MSG;MSG='';
+  h=bar('إدارة الفرق والقادة',1)+'<main>'+(mg?'<p class="ok center">'+mg+'</p>':'')+'<p class="note" style="margin:0 0 6px;color:var(--red)">⚠️ الحذف نهائي. حذف الفرقة يحذف كشافيها وسجلات حضورها.</p><h2>🚩 الفرق</h2>'+
+   (S.teams.map(function(t){return'<div class="st"><input id="en_'+t.id+'" value="'+esc(t.name)+'"><select id="es_'+t.id+'">'+Object.keys(SEC).map(function(k){return'<option value="'+k+'"'+((t.section||'scout')===k?' selected':'')+'>'+SEC[k][1]+'</option>'}).join('')+'</select><div class="row"><button class="b" style="margin:0;flex:1" onclick="saveTeam(\''+t.id+'\')">💾 حفظ</button><button class="s" style="color:var(--red);border-color:var(--red)" onclick="delTeam(\''+t.id+'\')">🗑 حذف الفرقة</button></div></div>'}).join('')||'<p class="center">لا توجد فرق</p>')+
+   '<h2>👤 القادة</h2>'+(S.leaders.map(function(l){return'<div class="card"><div class="t">'+esc(l.name)+'<small>المستخدم: '+esc(l.user)+'</small></div><button class="s" style="color:var(--red);border-color:var(--red)" onclick="delLeader(\''+l.id+'\')">🗑 حذف</button></div>'}).join('')||'<p class="center">لا يوجد قادة</p>')+'</main>';
  }
  else if(V.n==='stats'){
   var d=V.d||new Date().toISOString().slice(0,10),m=d.slice(0,7),ss=S.sessions;
@@ -170,7 +207,7 @@ function R(){
  }
  else if(V.n==='notify'){
   var NL=NOTIFY.list;
-  h=bar('تم حفظ الحضور ✅',1)+'<main>'+(NL.length?'<p class="center">أرسل إشعاراً لأولياء أمور الغائبين والمتأخرين:</p>'+NL.map(function(x){return'<div class="card"><div class="t">'+esc(x.name)+'<small>'+(x.st==='late'?'متأخر':'غائب')+'</small></div><button class="wa" style="border:0;cursor:pointer'+(x.sent?';opacity:.55':'')+'" onclick="sendNote(\''+x.id+'\')">'+(x.sent?'✓ أُرسل':'📨 واتساب')+'</button></div>'}).join(''):'<p class="center">لا يوجد غائبون أو متأخرون 🎉</p>')+'<button class="b" onclick="back()">إغلاق</button></main>';
+  h=bar(NOTIFY.queued?'حُفظ على الهاتف 📴':'تم حفظ الحضور ✅',1)+'<main>'+(NOTIFY.queued?'<p class="center" style="color:#b26a00;font-weight:700">لا يوجد اتصال، سيُرسَل الحضور تلقائياً عند عودة الإنترنت. لا تحذف التطبيق قبل ذلك.</p>':'')+(NL.length?'<p class="center">أرسل إشعاراً لأولياء أمور الغائبين والمتأخرين:</p>'+NL.map(function(x){return'<div class="card"><div class="t">'+esc(x.name)+'<small>'+(x.st==='late'?'متأخر':'غائب')+'</small></div><button class="wa" style="border:0;cursor:pointer'+(x.sent?';opacity:.55':'')+'" onclick="sendNote(\''+x.id+'\')">'+(x.sent?'✓ أُرسل':'📨 واتساب')+'</button></div>'}).join(''):'<p class="center">لا يوجد غائبون أو متأخرون 🎉</p>')+'<button class="b" onclick="back()">إغلاق</button></main>';
  }
  $('app').innerHTML=h;
 }
@@ -273,10 +310,26 @@ async function addLeader(){
  await loadAll();LE='';MSG='تم إنشاء حساب القائد ✅';R();
 }
 async function delLeader(id){
- if(!confirm('إلغاء تفعيل حساب القائد؟'))return;
+ var l=S.leaders.find(function(x){return x.id===id});if(!l)return;
+ if(!confirm('حذف القائد «'+l.name+'»؟\nلن يتمكن من الدخول إلى التطبيق بعد ذلك.'))return;
  await q(sb.from('team_leaders').delete().eq('leader_id',id));
  await q(sb.from('profiles').delete().eq('id',id));
- await loadAll();R();
+ await loadAll();MSG='تم حذف القائد';R();
+}
+async function saveTeam(id){
+ var n=val('en_'+id),sec=$('es_'+id).value;
+ if(!n){alert('اكتب اسم الفرقة');return}
+ await q(sb.from('teams').update({name:n,section:sec}).eq('id',id));
+ await loadAll();MSG='تم حفظ التعديل ✅';R();
+}
+async function delTeam(id){
+ var t=team(id);if(!t)return;
+ var c=S.scouts.filter(function(x){return x.teamId===id}).length;
+ var a=prompt('⚠️ سيُحذف نهائياً: الفرقة «'+t.name+'» و'+c+' كشاف وكل سجلات حضورها.\nلتأكيد الحذف اكتب اسم الفرقة بالضبط:');
+ if(a===null)return;
+ if(a.trim()!==t.name){alert('الاسم غير مطابق، لم يتم الحذف');return}
+ await q(sb.from('teams').delete().eq('id',id));
+ await loadAll();MSG='تم حذف الفرقة';R();
 }
 async function addTeam(){var n=val('tn');if(!n)return;await q(sb.from('teams').insert({id:uid(),name:n,section:$('ts').value}));await loadAll();R()}
 async function tgl(t,l,on){
@@ -309,12 +362,44 @@ async function saveAtt(){
  var rec={};sc.forEach(function(s){rec[s.id]=ST[s.id]||'present'});
  var d=val('adt');if(!d){alert('اختر التاريخ');return}
  var ctx={t:V.t,ty:V.ty,title:val('at'),date:d,dest:V.ty==='trip'?val('ad'):''};
- BUSY=true;
- try{await q(sb.from('sessions').insert({team_id:ctx.t,type:ctx.ty,title:ctx.title,destination:ctx.dest,date:d,records:rec}));await loadAll()}catch(e){BUSY=false;return}
+ var row={id:uuid(),team_id:ctx.t,type:ctx.ty,title:ctx.title,destination:ctx.dest,date:d,records:rec};
+ BUSY=true;var queued=false;
+ var r=null;
+ if(navigator.onLine){try{r=await sb.from('sessions').insert(row)}catch(e){r={error:e}}}
+ if(!r||r.error){
+  if(!r||isNet(r.error)){
+   var qd=lsGet('hz_queue')||[];qd.push({uid:AU.id,row:row});lsSet('hz_queue',qd);queued=true;
+   S.sessions.push({teamId:row.team_id,type:row.type,title:row.title,destination:row.destination,date:row.date,records:row.records});
+   lsSet('hz_snap',{uid:AU.id,S:S});
+  }else if(r.error.code!=='23505'){alert('خطأ: '+r.error.message);BUSY=false;return}
+ }
+ if(!queued){QUIET=true;try{await loadAll()}catch(e){}QUIET=false}
  BUSY=false;
- NOTIFY={ctx:ctx,list:sc.filter(function(x){return rec[x.id]!=='present'}).map(function(x){return{id:x.id,name:x.name,phone:x.phone,st:rec[x.id],sent:false}})};
- H.pop();V={n:'notify'};R();
+ NOTIFY={ctx:ctx,queued:queued,list:sc.filter(function(x){return rec[x.id]!=='present'}).map(function(x){return{id:x.id,name:x.name,phone:x.phone,st:rec[x.id],sent:false}})};
+ H.pop();V={n:'notify'};R();updateNet();
 }
+async function trySync(){
+ if(SYNCING||!AU||!navigator.onLine)return;
+ var all=lsGet('hz_queue')||[],mine=all.filter(function(x){return x.uid===AU.id});
+ if(!mine.length)return;
+ SYNCING=true;var done=0;
+ for(var k=0;k<mine.length;k++){
+  var it=mine[k],r;
+  try{r=await sb.from('sessions').insert(it.row)}catch(e){r={error:e}}
+  if(!r.error||r.error.code==='23505'){
+   lsSet('hz_queue',(lsGet('hz_queue')||[]).filter(function(x){return x.row.id!==it.row.id}));done++;
+  }else if(isNet(r.error))break;
+ }
+ SYNCING=false;
+ if(done){
+  QUIET=true;try{await loadAll()}catch(e){}QUIET=false;
+  if(['admin','leader','team'].indexOf(V.n)>-1){MSG='تم إرسال '+done+' تسجيل حضور محفوظ ✅';R()}
+ }
+ updateNet();
+}
+window.addEventListener('online',function(){updateNet();trySync()});
+window.addEventListener('offline',updateNet);
+setInterval(trySync,30000);
 function b64u(b){var p='='.repeat((4-b.length%4)%4),s=(b+p).replace(/-/g,'+').replace(/_/g,'/'),r=atob(s),a=new Uint8Array(r.length);for(var i=0;i<r.length;i++)a[i]=r.charCodeAt(i);return a}
 async function checkPush(){
  try{
