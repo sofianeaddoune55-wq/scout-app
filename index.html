@@ -319,7 +319,8 @@ function b64u(b){var p='='.repeat((4-b.length%4)%4),s=(b+p).replace(/-/g,'+').re
 async function checkPush(){
  try{
   if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){PUSH='unsupported'}
-  else{var reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();PUSH=(sub&&Notification.permission==='granted')?'on':'off'}
+  else{var reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
+  if(sub&&Notification.permission==='granted'){var j=sub.toJSON();try{var rr=await sb.rpc('save_push_sub',{p_endpoint:j.endpoint,p_p256dh:j.keys.p256dh,p_auth:j.keys.auth});PUSH=rr.error?'off':'on'}catch(e){PUSH='off'}}else PUSH='off'}
  }catch(e){PUSH='unsupported'}
  if(V.n==='leader')R();
 }
