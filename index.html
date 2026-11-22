@@ -128,7 +128,11 @@ async function enter(user,cached){
  QUIET=true;
  try{await loadAll()}catch(e){var sn=lsGet('hz_snap');if(sn&&sn.uid===AU.id&&sn.S)S=sn.S}
  QUIET=false;
- H=[];V=AU.role==='admin'?{n:'admin'}:{n:'leader',l:AU.id};LE='';R();updateNet();if(AU.role==='leader')checkPush();trySync();
+ H=[];V=AU.role==='admin'?{n:'admin'}:{n:'leader',l:AU.id};LE='';
+ notesSave(notesGet().filter(function(b){return b.list.some(function(x){return!x.sent})}));
+ var pn=AU.role==='leader'?notesGet().filter(function(b){return b.uid===AU.id&&b.open!==false&&b.list.some(function(x){return!x.sent})}):[];
+ if(pn.length){NOTIFY=pn[pn.length-1];H=[V];V={n:'notify'}}
+ R();updateNet();if(AU.role==='leader')checkPush();trySync();
 }
 async function doLogin(){
  var u=val('lu'),p=$('lp').value;if(!u||!p){LE='أدخل اسم المستخدم وكلمة المرور';return R()}
@@ -142,7 +146,7 @@ async function logout(){
  lsDel('hz_user');lsDel('hz_snap');AU=null;H=[];V={n:'login'};LE='';R();updateNet();
 }
 function go(v){H.push(V);V=v;if(v.n==='att')ST={};R()}
-function back(){V=H.pop()||{n:'login'};R()}
+function back(){if(V.n==='notify')finishNote();V=H.pop()||{n:'login'};R()}
 function bar(t,b,out){return'<header>'+(b?'<button class="ic" onclick="back()">→</button>':'')+'<h1>'+t+'</h1>'+(out?'<button class="ic" onclick="logout()">خروج</button>':'')+'</header>'}
 function team(id){return S.teams.find(function(t){return t.id===id})}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
@@ -188,7 +192,7 @@ function R(){
  }
  else if(V.n==='leader'){
   var mine=S.teams.filter(function(t){return t.leaders.indexOf(V.l)>-1});
-  h=bar('فرقي',0,1)+'<main>'+pushCard()+S.notices.filter(function(n){return n.to===V.l&&!n.read}).map(function(n){return'<div class="card" style="background:#fff8e1;border-color:#f9a825;color:#000"><div class="t">🔔 '+esc(n.text)+'<small style="color:#555">'+esc(n.date.slice(0,16).replace('T',' '))+'</small></div><button class="s" style="color:#000;border-color:#000" onclick="readN(\''+n.id+'\')">تم ✓</button></div>'}).join('')+(mine.map(function(t){return'<div class="card" onclick="go({n:\'team\',t:\''+t.id+'\'})" style="cursor:pointer"><div class="t">👥 '+esc(t.name)+'<small>'+secOf(t)[1]+' · اضغط لعرض الكشافين</small></div>‹</div>'}).join('')||'<p class="center">لم يتم تعيينك في أي فرقة بعد</p>')+'</main>';
+  h=bar('فرقي',0,1)+'<main>'+pushCard()+pendingCards()+S.notices.filter(function(n){return n.to===V.l&&!n.read}).map(function(n){return'<div class="card" style="background:#fff8e1;border-color:#f9a825;color:#000"><div class="t">🔔 '+esc(n.text)+'<small style="color:#555">'+esc(n.date.slice(0,16).replace('T',' '))+'</small></div><button class="s" style="color:#000;border-color:#000" onclick="readN(\''+n.id+'\')">تم ✓</button></div>'}).join('')+(mine.map(function(t){return'<div class="card" onclick="go({n:\'team\',t:\''+t.id+'\'})" style="cursor:pointer"><div class="t">👥 '+esc(t.name)+'<small>'+secOf(t)[1]+' · اضغط لعرض الكشافين</small></div>‹</div>'}).join('')||'<p class="center">لم يتم تعيينك في أي فرقة بعد</p>')+'</main>';
  }
  else if(V.n==='team'){
   var tm=team(V.t),sc=S.scouts.filter(function(s){return s.teamId===V.t});
@@ -207,7 +211,8 @@ function R(){
  }
  else if(V.n==='notify'){
   var NL=NOTIFY.list;
-  h=bar(NOTIFY.queued?'حُفظ على الهاتف 📴':'تم حفظ الحضور ✅',1)+'<main>'+(NOTIFY.queued?'<p class="center" style="color:#b26a00;font-weight:700">لا يوجد اتصال، سيُرسَل الحضور تلقائياً عند عودة الإنترنت. لا تحذف التطبيق قبل ذلك.</p>':'')+(NL.length?'<p class="center">أرسل إشعاراً لأولياء أمور الغائبين والمتأخرين:</p>'+NL.map(function(x){return'<div class="card"><div class="t">'+esc(x.name)+'<small>'+(x.st==='late'?'متأخر':'غائب')+'</small></div><button class="wa" style="border:0;cursor:pointer'+(x.sent?';opacity:.55':'')+'" onclick="sendNote(\''+x.id+'\')">'+(x.sent?'✓ أُرسل':'📨 واتساب')+'</button></div>'}).join(''):'<p class="center">لا يوجد غائبون أو متأخرون 🎉</p>')+'<button class="b" onclick="back()">إغلاق</button></main>';
+  var nq=(lsGet('hz_queue')||[]).some(function(x){return x.row.id===NOTIFY.rowId});
+  h=bar(nq?'حُفظ على الهاتف 📴':'تم حفظ الحضور ✅',1)+'<main>'+(nq?'<p class="center" style="color:#b26a00;font-weight:700">لا يوجد اتصال، سيُرسَل الحضور تلقائياً عند عودة الإنترنت. لا تحذف التطبيق قبل ذلك.</p>':'')+(NL.length?'<p class="center">أرسل إشعاراً لأولياء أمور الغائبين والمتأخرين:</p>'+NL.map(function(x){return'<div class="card"><div class="t">'+esc(x.name)+'<small>'+(x.st==='late'?'متأخر':'غائب')+'</small></div><button class="wa" style="border:0;cursor:pointer'+(x.sent?';opacity:.55':'')+'" onclick="sendNote(\''+x.id+'\')">'+(x.sent?'✓ أُرسل':'📨 واتساب')+'</button></div>'}).join(''):'<p class="center">لا يوجد غائبون أو متأخرون 🎉</p>')+'<button class="b" onclick="back()">'+(NL.every(function(x){return x.sent})?'إغلاق':'إغلاق وأرسلها لاحقاً')+'</button>'+(NL.some(function(x){return!x.sent})?'<button class="s" style="width:100%;margin-top:10px;color:var(--red);border-color:var(--red)" onclick="dropNote()">🗑 تجاهل الرسائل المتبقية</button>':'')+'</main>';
  }
  $('app').innerHTML=h;
 }
@@ -350,10 +355,30 @@ function msgFor(sc,st,c){
  if(c.ty==='trip')return head+'تغيّب عن رحلة'+tt+(c.dest?' إلى '+c.dest:'')+tail;
  return head+(st==='late'?'تأخر عن ':'تغيّب عن ')+TL[c.ty]+tt+tail;
 }
+function notesGet(){return lsGet('hz_notes')||[]}
+function notesSave(a){lsSet('hz_notes',a)}
+function persistNote(){var a=notesGet(),i=a.findIndex(function(x){return x.id===NOTIFY.id});if(i>-1){a[i]=NOTIFY;notesSave(a)}}
+function finishNote(){
+ var a=notesGet(),b=a.find(function(x){return x.id===NOTIFY.id});if(!b)return;
+ if(b.list.every(function(x){return x.sent}))a=a.filter(function(x){return x.id!==b.id});else b.open=false;
+ notesSave(a);
+}
+function dropNote(){
+ if(!confirm('تجاهل الرسائل التي لم تُرسَل؟ لن تظهر مرة أخرى.'))return;
+ notesSave(notesGet().filter(function(x){return x.id!==NOTIFY.id}));
+ V={n:'leader',l:AU.id};H=[];R();
+}
+function openNote(id){var b=notesGet().find(function(x){return x.id===id});if(!b)return;b.open=true;NOTIFY=b;persistNote();go({n:'notify'})}
+function pendingCards(){
+ if(!AU)return'';
+ return notesGet().filter(function(b){return b.uid===AU.id&&b.list.some(function(x){return!x.sent})}).map(function(b){
+  var left=b.list.filter(function(x){return!x.sent}).length,t=team(b.ctx.t);
+  return'<div class="card" style="cursor:pointer;border-color:var(--amber)" onclick="openNote(\''+b.id+'\')"><div class="t">📨 رسائل بانتظار الإرسال<small>'+esc(t?t.name:'')+' — '+esc(b.ctx.date)+' — '+left+' متبقية</small></div>‹</div>'}).join('');
+}
 function sendNote(id){
  var x=NOTIFY.list.find(function(z){return z.id===id});if(!x)return;
  window.open('https://wa.me/'+norm(x.phone)+'?text='+encodeURIComponent(msgFor(x,x.st,NOTIFY.ctx)),'_blank');
- x.sent=true;R();
+ x.sent=true;persistNote();R();
 }
 function norm(p){p=p.replace(/[^0-9+]/g,'');if(p[0]==='+')return p.slice(1);if(p.slice(0,2)==='00')return p.slice(2);if(p[0]==='0')return CC+p.slice(1);if(p.length===9)return CC+p;return p}
 async function saveAtt(){
@@ -375,7 +400,9 @@ async function saveAtt(){
  }
  if(!queued){QUIET=true;try{await loadAll()}catch(e){}QUIET=false}
  BUSY=false;
- NOTIFY={ctx:ctx,queued:queued,list:sc.filter(function(x){return rec[x.id]!=='present'}).map(function(x){return{id:x.id,name:x.name,phone:x.phone,st:rec[x.id],sent:false}})};
+ var nl=sc.filter(function(x){return rec[x.id]!=='present'}).map(function(x){return{id:x.id,name:x.name,phone:x.phone,st:rec[x.id],sent:false}});
+ NOTIFY={id:uuid(),uid:AU.id,rowId:row.id,ctx:ctx,list:nl,open:true,created:Date.now()};
+ if(nl.length){var na=notesGet();na.push(NOTIFY);notesSave(na)}
  H.pop();V={n:'notify'};R();updateNet();
 }
 async function trySync(){
