@@ -79,6 +79,7 @@ var CONFIGURED=SUPABASE_URL.indexOf('http')===0&&SUPABASE_KEY.length>20;
 var sb=CONFIGURED?supabase.createClient(SUPABASE_URL,SUPABASE_KEY):null;
 var S={teams:[],leaders:[],scouts:[],sessions:[],notices:[]};
 var V={n:'login'},H=[],ST={},AU=null,MSG='',LE='',BUSY=false,TL={lesson:'حصة',survey:'استطلاع',trip:'رحلة'},SEC={cub:['شبل','الأشبال'],scout:['كشاف','الكشافة'],rover:['جوال','الجوالة']};
+function tn(n){return /^\s*فرقة/.test(n)?n.trim():'فرقة '+n}
 function secOf(t){return SEC[t.section]||SEC.scout}
 function secOpts(id){return'<select id="'+id+'">'+Object.keys(SEC).map(function(k){return'<option value="'+k+'">'+SEC[k][1]+'</option>'}).join('')+'</select>'}
 function toEmail(u){u=u.trim().toLowerCase();return u.indexOf('@')>-1?u:u+'@scout.app'}
@@ -196,12 +197,21 @@ function R(){
  }
  else if(V.n==='team'){
   var tm=team(V.t),sc=S.scouts.filter(function(s){return s.teamId===V.t});
-  var mm=MSG;MSG='';h=bar(esc(tm.name),1)+'<main>'+(mm?'<p class="ok center">'+mm+'</p>':'')+(sc.map(function(s){return'<div class="card"><div class="t">🧒 '+esc(s.name)+'<small>'+esc(s.phone)+'</small></div><button class="d" onclick="delScout(\''+s.id+'\')">🗑</button></div>'}).join('')||'<p class="center">لا يوجد كشافون</p>')+
+  var nflag=sc.filter(function(x){var z=scoutStats(x.id,V.t);return z.streak>=ABS_STREAK||z.late>=LATE_MAX}).length;
+  var mm=MSG;MSG='';h=bar(esc(tm.name),1)+'<main>'+(mm?'<p class="ok center">'+mm+'</p>':'')+(nflag?'<p class="center" style="color:#b26a00;font-weight:700;margin:0 0 10px">⚠️ '+nflag+' يحتاجون متابعة</p>':'')+(sc.map(function(s){
+    var z=scoutStats(s.id,V.t),fa=z.streak>=ABS_STREAK,fl=z.late>=LATE_MAX;
+    return'<div class="card" style="flex-wrap:wrap'+((fa||fl)?';border-color:#b26a00':'')+'"><div class="t">🧒 '+esc(s.name)+'<small>'+esc(s.phone)+'</small><small>آخر شهرين: غياب '+z.abs+' · تأخر '+z.late+(z.streak?' · غياب متتالٍ '+z.streak:'')+'</small></div><button class="d" onclick="delScout(\''+s.id+'\')">🗑</button>'+
+     (fa?'<button class="s" style="width:100%;margin-top:6px;color:#b26a00;border-color:#b26a00" onclick="warnScout(\''+s.id+'\',\'abs\')">⚠️ غاب '+z.streak+' مرات متتالية — إرسال استفسار لولي الأمر</button>':'')+
+     (fl?'<button class="s" style="width:100%;margin-top:6px;color:#b26a00;border-color:#b26a00" onclick="warnScout(\''+s.id+'\',\'late\')">⏰ تأخر '+z.late+' مرات — إرسال تنبيه لولي الأمر</button>':'')+'</div>'}).join('')||'<p class="center">لا يوجد كشافون</p>')+
    '<h2>إضافة كشاف</h2><input id="sn" placeholder="اسم الكشاف"><input id="sp" type="tel" placeholder="رقم ولي الأمر (واتساب)"><button class="b" style="background:transparent;color:var(--pri);border:1px solid var(--pri)" onclick="addScout()">＋ إضافة</button>'+
    '<button class="b" onclick="go({n:\'type\',t:\''+V.t+'\'})">✅ تسجيل الحضور</button></main>';
  }
  else if(V.n==='type'){
-  h=bar('اختر نوع الحصة',1)+'<main>'+[['lesson','📖'],['survey','🔍'],['trip','🚌']].map(function(x){return'<div class="card" style="cursor:pointer;font-size:20px" onclick="go({n:\'att\',t:\''+V.t+'\',ty:\''+x[0]+'\'})"><div class="t">'+x[1]+' '+TL[x[0]]+'</div>‹</div>'}).join('')+'</main>';
+  var tdy=new Date().toISOString().slice(0,10);
+  h=bar('اختر نوع الحصة',1)+'<main>'+[['lesson','📖'],['survey','🔍'],['trip','🚌']].map(function(x){
+   var done=S.sessions.some(function(z){return z.teamId===V.t&&z.type===x[0]&&z.date===tdy});
+   var oc=done?"alert('تم تسجيل هذا الحضور اليوم، وهو مغلق ولا يمكن تعديله')":"go({n:'att',t:'"+V.t+"',ty:'"+x[0]+"'})";
+   return'<div class="card" style="cursor:pointer;font-size:20px'+(done?';opacity:.6':'')+'" onclick="'+oc+'"><div class="t">'+x[1]+' '+TL[x[0]]+(done?'<small>✓ سُجّل اليوم — مغلق</small>':'')+'</div>'+(done?'🔒':'‹')+'</div>'}).join('')+'</main>';
  }
  else if(V.n==='att'){
   var trip=V.ty==='trip',sc2=S.scouts.filter(function(s){return s.teamId===V.t});
@@ -316,10 +326,9 @@ async function addLeader(){
 }
 async function delLeader(id){
  var l=S.leaders.find(function(x){return x.id===id});if(!l)return;
- if(!confirm('حذف القائد «'+l.name+'»؟\nلن يتمكن من الدخول إلى التطبيق بعد ذلك.'))return;
- await q(sb.from('team_leaders').delete().eq('leader_id',id));
- await q(sb.from('profiles').delete().eq('id',id));
- await loadAll();MSG='تم حذف القائد';R();
+ if(!confirm('حذف القائد «'+l.name+'» نهائياً؟\nسيُحذف حسابه من قاعدة البيانات ولن يستطيع الدخول بعد ذلك.'))return;
+ await q(sb.rpc('delete_leader',{p_id:id}));
+ await loadAll();MSG='تم حذف القائد نهائياً';R();
 }
 async function saveTeam(id){
  var n=val('en_'+id),sec=$('es_'+id).value;
@@ -351,7 +360,7 @@ function segHtml(id,trip){
 function setSt(id,v){ST[id]=v;$('sg'+id).innerHTML=segHtml(id,V.ty==='trip')}
 function msgFor(sc,st,c){
  var tmo=team(c.t),tm=tmo.name,sec=secOf(tmo),date=c.date.replace(/-/g,'/'),tt=c.title?' "'+c.title+'"':'';
- var head='السلام عليكم ورحمة الله،\nنفيدكم بأن ال'+sec[0]+' '+sc.name+' ',tail=' بتاريخ '+date+' (فرقة '+tm+' — '+sec[1]+').\nشكراً لكم على حسن تعاونكم 😊';
+ var head='السلام عليكم ورحمة الله،\nنفيدكم بأن ال'+sec[0]+' '+sc.name+' ',tail=' بتاريخ '+date+' ('+tn(tm)+' — '+sec[1]+').\nشكراً لكم على حسن تعاونكم 😊';
  if(c.ty==='trip')return head+'تغيّب عن رحلة'+tt+(c.dest?' إلى '+c.dest:'')+tail;
  return head+(st==='late'?'تأخر عن ':'تغيّب عن ')+TL[c.ty]+tt+tail;
 }
@@ -375,6 +384,22 @@ function pendingCards(){
   var left=b.list.filter(function(x){return!x.sent}).length,t=team(b.ctx.t);
   return'<div class="card" style="cursor:pointer;border-color:var(--amber)" onclick="openNote(\''+b.id+'\')"><div class="t">📨 رسائل بانتظار الإرسال<small>'+esc(t?t.name:'')+' — '+esc(b.ctx.date)+' — '+left+' متبقية</small></div>‹</div>'}).join('');
 }
+var ABS_STREAK=3,LATE_MAX=5,WIN_DAYS=60;
+function scoutStats(sid,tid){
+ var ss=S.sessions.filter(function(x){return x.teamId===tid&&x.records&&x.records[sid]!==undefined}).sort(function(a,b){return a.date<b.date?1:(a.date>b.date?-1:0)});
+ var streak=0;for(var i=0;i<ss.length;i++){if(ss[i].records[sid]==='absent')streak++;else break}
+ var lim=new Date(Date.now()-WIN_DAYS*86400000).toISOString().slice(0,10),abs=0,late=0;
+ ss.forEach(function(x){if(x.date>=lim){var r=x.records[sid];if(r==='absent')abs++;else if(r==='late')late++}});
+ return{streak:streak,abs:abs,late:late,total:ss.length};
+}
+function warnScout(id,kind){
+ var sc=S.scouts.find(function(x){return x.id===id});if(!sc)return;
+ var tmo=team(sc.teamId),sec=secOf(tmo),z=scoutStats(id,sc.teamId);
+ var head='السلام عليكم ورحمة الله،\nنلاحظ أن ال'+sec[0]+' '+sc.name+' ',tail=' ('+tn(tmo.name)+' — '+sec[1]+').';
+ var m=kind==='abs'?head+'تغيّب عن '+z.streak+' حصص متتالية'+tail+'\nنرجو إفادتنا بسبب الغياب، ونطمئن عليه 🙏'
+  :head+'تأخر '+z.late+' مرات خلال آخر شهرين'+tail+'\nنرجو التنبيه على أهمية الالتزام بموعد الحصة، شكراً لتعاونكم 🙏';
+ window.open('https://wa.me/'+norm(sc.phone)+'?text='+encodeURIComponent(m),'_blank');
+}
 function sendNote(id){
  var x=NOTIFY.list.find(function(z){return z.id===id});if(!x)return;
  window.open('https://wa.me/'+norm(x.phone)+'?text='+encodeURIComponent(msgFor(x,x.st,NOTIFY.ctx)),'_blank');
@@ -388,6 +413,7 @@ async function saveAtt(){
  var d=val('adt');if(!d){alert('اختر التاريخ');return}
  var ctx={t:V.t,ty:V.ty,title:val('at'),date:d,dest:V.ty==='trip'?val('ad'):''};
  var row={id:uuid(),team_id:ctx.t,type:ctx.ty,title:ctx.title,destination:ctx.dest,date:d,records:rec};
+ if(S.sessions.some(function(z){return z.teamId===ctx.t&&z.type===ctx.ty&&z.date===d})){alert('تم تسجيل هذا الحضور مسبقاً لهذا التاريخ. الحضور مغلق ولا يمكن تعديله أو تسجيله مرة أخرى.');return}
  BUSY=true;var queued=false;
  var r=null;
  if(navigator.onLine){try{r=await sb.from('sessions').insert(row)}catch(e){r={error:e}}}
@@ -396,7 +422,8 @@ async function saveAtt(){
    var qd=lsGet('hz_queue')||[];qd.push({uid:AU.id,row:row});lsSet('hz_queue',qd);queued=true;
    S.sessions.push({teamId:row.team_id,type:row.type,title:row.title,destination:row.destination,date:row.date,records:row.records});
    lsSet('hz_snap',{uid:AU.id,S:S});
-  }else if(r.error.code!=='23505'){alert('خطأ: '+r.error.message);BUSY=false;return}
+  }else if(r.error.code==='23505'){alert('سُجّل هذا الحضور مسبقاً (ربما من جهاز آخر)، وهو مغلق ولا يمكن تعديله.');BUSY=false;QUIET=true;try{await loadAll()}catch(e){}QUIET=false;return}
+  else{alert('خطأ: '+r.error.message);BUSY=false;return}
  }
  if(!queued){QUIET=true;try{await loadAll()}catch(e){}QUIET=false}
  BUSY=false;
@@ -409,16 +436,18 @@ async function trySync(){
  if(SYNCING||!AU||!navigator.onLine)return;
  var all=lsGet('hz_queue')||[],mine=all.filter(function(x){return x.uid===AU.id});
  if(!mine.length)return;
- SYNCING=true;var done=0;
+ SYNCING=true;var done=0,conflicts=0;
  for(var k=0;k<mine.length;k++){
   var it=mine[k],r;
   try{r=await sb.from('sessions').insert(it.row)}catch(e){r={error:e}}
-  if(!r.error||r.error.code==='23505'){
-   lsSet('hz_queue',(lsGet('hz_queue')||[]).filter(function(x){return x.row.id!==it.row.id}));done++;
+  if(r.error&&r.error.code==='23505'){var ex;try{ex=await sb.from('sessions').select('id').eq('id',it.row.id).maybeSingle()}catch(e){ex={}}var isC=!(ex&&ex.data);if(isC)conflicts++;r={error:null,isC:isC}}
+  if(!r.error){
+   lsSet('hz_queue',(lsGet('hz_queue')||[]).filter(function(x){return x.row.id!==it.row.id}));if(!r.isC)done++;
   }else if(isNet(r.error))break;
  }
  SYNCING=false;
- if(done){
+ if(conflicts)alert('تعذّر إرسال '+conflicts+' تسجيل حضور لأنه سُجّل مسبقاً من جهاز آخر لنفس الفرقة والتاريخ.');
+ if(done||conflicts){
   QUIET=true;try{await loadAll()}catch(e){}QUIET=false;
   if(['admin','leader','team'].indexOf(V.n)>-1){MSG='تم إرسال '+done+' تسجيل حضور محفوظ ✅';R()}
  }
