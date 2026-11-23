@@ -168,7 +168,7 @@ function R(){
   h=bar('حضوري')+'<main><div class="big" style="overflow:hidden;padding:0"><img src="icon-192.png" alt="" style="width:100%;height:100%;object-fit:cover"></div><p class="center">تسجيل الدخول</p><input id="lu" placeholder="اسم المستخدم أو البريد" autocomplete="username" autocapitalize="none"><input id="lp" type="password" placeholder="كلمة المرور" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')doLogin()"><div class="no center">'+LE+'</div><button class="b" onclick="doLogin()">دخول</button><p class="note">حسابات القادة تنشئها الإدارة فقط</p></main>';
  }
  else if(V.n==='admin'){
-  var am=MSG;MSG='';h=bar('لوحة الإدارة',0,1)+'<main>'+(am?'<p class="ok center">'+am+'</p>':'')+'<button class="b" style="margin:0 0 6px" onclick="go({n:\'stats\'})">📊 الإحصائيات</button><button class="b" style="margin:0 0 6px;background:transparent;color:var(--pri);border:1.5px solid var(--pri);box-shadow:none" onclick="go({n:\'manage\'})">⚙️ إدارة الفرق والقادة</button>'+todayBox()+excelBox()+'<h2>الفرق</h2>'+
+  var am=MSG;MSG='';h=bar('لوحة الإدارة',0,1)+'<main>'+(am?'<p class="ok center">'+am+'</p>':'')+'<button class="b" style="margin:0 0 6px" onclick="go({n:\'stats\'})">📊 الإحصائيات</button><button class="b" style="margin:0 0 6px;background:transparent;color:var(--pri);border:1.5px solid var(--pri);box-shadow:none" onclick="go({n:\'manage\'})">⚙️ إدارة الفرق والقادة</button><button class="b" style="margin:0 0 6px;background:transparent;color:var(--pri);border:1.5px solid var(--pri);box-shadow:none" onclick="go({n:\'follow\'})">📊 متابعة الغياب والتأخر</button>'+todayBox()+excelBox()+'<h2>الفرق</h2>'+
    (S.teams.map(function(t){return'<div class="card"><div class="t">🚩 '+esc(t.name)+'<small>القسم: '+secOf(t)[1]+' · عدد القادة: '+t.leaders.length+'</small></div><button class="s" onclick="go({n:\'assign\',t:\''+t.id+'\'})">القادة</button></div>'}).join('')||'<p class="center">لا توجد فرق</p>')+
    secOpts('ts')+'<div class="row"><input id="tn" placeholder="فرقة جديدة، مثال: فرقة النسور"><button class="s" onclick="addTeam()">إنشاء</button></div>'+
    '<h2>حسابات القادة</h2>'+(S.leaders.map(function(l){return'<div class="card"><div class="t">👤 '+esc(l.name)+'<small>المستخدم: '+esc(l.user)+'</small></div></div>'}).join('')||'<p class="center">لا يوجد قادة</p>')+
@@ -193,7 +193,7 @@ function R(){
  }
  else if(V.n==='leader'){
   var mine=S.teams.filter(function(t){return t.leaders.indexOf(V.l)>-1});
-  h=bar('فرقي',0,1)+'<main>'+pushCard()+pendingCards()+S.notices.filter(function(n){return n.to===V.l&&!n.read}).map(function(n){return'<div class="card" style="background:#fff8e1;border-color:#f9a825;color:#000"><div class="t">🔔 '+esc(n.text)+'<small style="color:#555">'+esc(n.date.slice(0,16).replace('T',' '))+'</small></div><button class="s" style="color:#000;border-color:#000" onclick="readN(\''+n.id+'\')">تم ✓</button></div>'}).join('')+(mine.map(function(t){return'<div class="card" onclick="go({n:\'team\',t:\''+t.id+'\'})" style="cursor:pointer"><div class="t">👥 '+esc(t.name)+'<small>'+secOf(t)[1]+' · اضغط لعرض الكشافين</small></div>‹</div>'}).join('')||'<p class="center">لم يتم تعيينك في أي فرقة بعد</p>')+'</main>';
+  h=bar('فرقي',0,1)+'<main>'+pushCard()+pendingCards()+followCard()+S.notices.filter(function(n){return n.to===V.l&&!n.read}).map(function(n){return'<div class="card" style="background:#fff8e1;border-color:#f9a825;color:#000"><div class="t">🔔 '+esc(n.text)+'<small style="color:#555">'+esc(n.date.slice(0,16).replace('T',' '))+'</small></div><button class="s" style="color:#000;border-color:#000" onclick="readN(\''+n.id+'\')">تم ✓</button></div>'}).join('')+(mine.map(function(t){return'<div class="card" onclick="go({n:\'team\',t:\''+t.id+'\'})" style="cursor:pointer"><div class="t">👥 '+esc(t.name)+'<small>'+secOf(t)[1]+' · اضغط لعرض الكشافين</small></div>‹</div>'}).join('')||'<p class="center">لم يتم تعيينك في أي فرقة بعد</p>')+'</main>';
  }
  else if(V.n==='team'){
   var tm=team(V.t),sc=S.scouts.filter(function(s){return s.teamId===V.t});
@@ -205,6 +205,15 @@ function R(){
      (fl?'<button class="s" style="width:100%;margin-top:6px;color:#b26a00;border-color:#b26a00" onclick="warnScout(\''+s.id+'\',\'late\')">⏰ تأخر '+z.late+' مرات — إرسال تنبيه لولي الأمر</button>':'')+'</div>'}).join('')||'<p class="center">لا يوجد كشافون</p>')+
    '<h2>إضافة كشاف</h2><input id="sn" placeholder="اسم الكشاف"><input id="sp" type="tel" placeholder="رقم ولي الأمر (واتساب)"><button class="b" style="background:transparent;color:var(--pri);border:1px solid var(--pri)" onclick="addScout()">＋ إضافة</button>'+
    '<button class="b" onclick="go({n:\'type\',t:\''+V.t+'\'})">✅ تسجيل الحضور</button></main>';
+ }
+ else if(V.n==='follow'){
+  var fts=myTeams();
+  h=bar('متابعة الغياب والتأخر',1)+'<main><p class="note" style="margin:0 0 8px">آخر شهرين — يظهر التنبيه عند غياب '+ABS_STREAK+' مرات متتالية أو تأخر '+LATE_MAX+' مرات</p>'+
+   (fts.map(function(t){
+     var rows=S.scouts.filter(function(x){return x.teamId===t.id}).map(function(x){return{s:x,z:scoutStats(x.id,t.id)}});
+     rows.sort(function(a,b){var fa=isFlag(a.z)?1:0,fb=isFlag(b.z)?1:0;return fb-fa||(b.z.abs+b.z.late)-(a.z.abs+a.z.late)});
+     return'<h2>'+esc(t.name)+'</h2>'+(rows.map(function(r){return followRow(r.s,r.z)}).join('')||'<p class="center">لا يوجد كشافون</p>')
+    }).join('')||'<p class="center">لا توجد فرق</p>')+'</main>';
  }
  else if(V.n==='type'){
   var tdy=new Date().toISOString().slice(0,10);
@@ -391,6 +400,20 @@ function scoutStats(sid,tid){
  var lim=new Date(Date.now()-WIN_DAYS*86400000).toISOString().slice(0,10),abs=0,late=0;
  ss.forEach(function(x){if(x.date>=lim){var r=x.records[sid];if(r==='absent')abs++;else if(r==='late')late++}});
  return{streak:streak,abs:abs,late:late,total:ss.length};
+}
+function isFlag(z){return z.streak>=ABS_STREAK||z.late>=LATE_MAX}
+function myTeams(){return S.teams.filter(function(t){return AU&&(AU.role==='admin'||t.leaders.indexOf(AU.id)>-1)})}
+function followCount(){var n=0;myTeams().forEach(function(t){S.scouts.forEach(function(x){if(x.teamId===t.id&&isFlag(scoutStats(x.id,t.id)))n++})});return n}
+function followCard(){
+ if(!AU||AU.role!=='leader'||!myTeams().length)return'';
+ var n=followCount();
+ return'<div class="card" style="cursor:pointer'+(n?';border-color:#b26a00':'')+'" onclick="go({n:\'follow\'})"><div class="t">📊 متابعة الغياب والتأخر<small>'+(n?'⚠️ '+n+' يحتاجون متابعة':'لا أحد يحتاج متابعة حالياً')+'</small></div>‹</div>';
+}
+function followRow(s,z){
+ var fa=z.streak>=ABS_STREAK,fl=z.late>=LATE_MAX;
+ return'<div class="card" style="flex-wrap:wrap'+((fa||fl)?';border-color:#b26a00':'')+'"><div class="t">🧒 '+esc(s.name)+'<small>غياب '+z.abs+' · تأخر '+z.late+(z.streak?' · غياب متتالٍ '+z.streak:'')+'</small></div>'+
+  (fa?'<button class="s" style="width:100%;margin-top:6px;color:#b26a00;border-color:#b26a00" onclick="warnScout(\''+s.id+'\',\'abs\')">⚠️ غاب '+z.streak+' مرات متتالية — إرسال استفسار</button>':'')+
+  (fl?'<button class="s" style="width:100%;margin-top:6px;color:#b26a00;border-color:#b26a00" onclick="warnScout(\''+s.id+'\',\'late\')">⏰ تأخر '+z.late+' مرات — إرسال تنبيه</button>':'')+'</div>';
 }
 function warnScout(id,kind){
  var sc=S.scouts.find(function(x){return x.id===id});if(!sc)return;
